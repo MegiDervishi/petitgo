@@ -40,31 +40,31 @@ rule token = parse
   | entier as e { semicolon := true; INT(int_of_string e) }
   | chaine as c { semicolon := true; STRING c }
   | "&&"        { semicolon := false; AND }
-	| "||"        { semicolon := false; OR }
-	| "=="        { semicolon := false; ISEQ }
+  | "||"        { semicolon := false; OR }
+  | "=="        { semicolon := false; ISEQ }
   | "!="        { semicolon := false; NEQ }
   | ">"         { semicolon := false; GT }
   | ">="        { semicolon := false; GEQ }
   | "<"         { semicolon := false; LT }
-	| "<="        { semicolon := false; LE }
-	| ":="        { semicolon := false; REF }
+  | "<="        { semicolon := false; LE }
+  | ":="        { semicolon := false; REF }
   | "="         { semicolon := false; EQUAL}
-	| "++"        { semicolon := true;  INCR }
-	| "--"        { semicolon := true;  DECR }
-	| "+"         { semicolon := false; ADD }
-	| "-"         { semicolon := false; MINUS }
-	| "*"         { semicolon := false; MULT }
-	| "/"         { semicolon := false; DIV }
-	| "%"         { semicolon := false; MOD }
-	| "&"         { semicolon := false; ADDRESS }
-	| "!"         { semicolon := false; NOT }
+  | "++"        { semicolon := true;  INCR }
+  | "--"        { semicolon := true;  DECR }
+  | "+"         { semicolon := false; ADD }
+  | "-"         { semicolon := false; MINUS }
+  | "*"         { semicolon := false; MULT }
+  | "/"         { semicolon := false; DIV }
+  | "%"         { semicolon := false; MOD }
+  | "&"         { semicolon := false; ADDRESS }
+  | "!"         { semicolon := false; NOT }
   | "."         { semicolon := false; DOT }
-	| "("         { semicolon := false; LPAREN }
+  | "("         { semicolon := false; LPAREN }
   | ")"         { semicolon := true;  RPAREN }
   | "{"         { semicolon := false; LBRACE }
   | "}"         { semicolon := true;  RBRACE }
-	| ";"         { semicolon := false; SEMICOL}
-	| ","         { semicolon := false; COMMA }
+  | ";"         { semicolon := false; SEMICOL}
+  | ","         { semicolon := false; COMMA }
   | ident as id {
                 semicolon := false;
                 try Hashtbl.find keywords id
