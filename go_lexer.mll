@@ -2,7 +2,7 @@
   open Lexing
   open Go_parser
 
-  exception LexingError
+  exception LexingError of string
 
   let keywords = Hashtbl.create 99
   let () = List.iter (fun (s,t) -> Hashtbl.add keywords s t)
@@ -39,7 +39,7 @@ rule token = parse
   | "fmt"       { semicolon := true; IDENT "fmt"  }
   | "/*"        { comment1 lexbuf }
   | "//"        { comment2 lexbuf }
-  | entier as e { semicolon := true; INT e }
+  | entier as e { semicolon := true; STRING e }
   | chaine as c { semicolon := true; STRING c }
   | "&&"        { semicolon := false; AND }
   | "||"        { semicolon := false; OR }
@@ -74,7 +74,9 @@ rule token = parse
                     try Hashtbl.find keys_colon id 
                     with Not_found -> IDENT id }
   | eof         { EOF }
-  | _           { raise (LexingError "Unknown Character" }
+  | _ as c      { raise (LexingError "Unknown Character in string: " ^ 
+                (if c = '\n' then "\\n" else String.make 1 c))}
+
 
 and comment1 = parse
   | "*/"  { token lexbuf }
@@ -87,4 +89,4 @@ and comment2 = parse
             if !semicolon then semicolon:= false; SEMICOL
             else token lexbuf}
   | _     { comment2 lexbuf }
-  | eof   { EOF }
+  | eof   { raise (LexingError "Unterminated Comment" ) }
