@@ -24,17 +24,16 @@
 	    
 %token <string> STRING
 %token <string> IDENT
-%token <int64> INT
+%token <int64>  INT
 
 
 /* Priority and associativity*/
-/* %nonassoc IF ELSE */
 %nonassoc DOT 
 %nonassoc LT GT LEQ GEQ
 %left OR AND 
 %left ISEQ NEQ
 %left ADD MINUS MULT DIV MOD
-%nonassoc sign  pointer ADDRESS NOT 
+%nonassoc sign pointer ADDRESS NOT 
 
 %start program
 %type <Go_ast.program> program
@@ -83,20 +82,20 @@ type_go :
 expr :
   | i = INT     { Eint64 i }
   | s = STRING  { Estring s }
-  | t = TRUE    { Ebool true  }
-  | f = FALSE   { Ebool false }
-  | n = NIL     { ENil }
+  | TRUE        { Ebool true  }
+  | FALSE       { Ebool false }
+  | id = IDENT  { Eident id }
+  | NIL         { ENil }
   | LPAREN; e = expr; RPAREN    { e }
-  | id = IDENT                  { Eident id }
   | e = expr; DOT; i = IDENT    { Emethod (e, i) }
   | id = IDENT; LPAREN; le = separated_list(COMMA, expr); RPAREN 
     { Ecall (id, le) }
   | f = expr; DOT; p = IDENT; LPAREN; le = separated_list(COMMA, expr); RPAREN
     { if f= Eident "fmt" && p="Print" then Eprint le else raise ParsingError }
-  | MINUS; e = expr             { Eunop (Sign, e)  } %prec sign
+  | MINUS; e = expr             { Ebinop (Minus, Eint64 Int64.zero, e)  } %prec sign
   | MULT; e = expr              { Eunop (Pointer, e)   } %prec pointer
   | op = unop1 ; e = expr       { Eunop (op, e)}
-  | e1 = expr; op = binop; e2 = expr { Ebinop (op, e1, e2)}
+  | e1 = expr; op = binop; e2 = expr { Ebinop (op, e1, e2)};
 
 block :
   | LBRACE; bl = sep_list_plus(SEMICOL, instr); RBRACE { bl }
@@ -104,18 +103,23 @@ block :
 
 instr_simple :
   | e = expr       { Isexpr e }
-  | e = expr; INCR { Isid  (Incr, e) } /*check this for int64*/
-  | e = expr; DECR { Isid (Decr, e) }
+  | e = expr; INCR { Isassign (e, Ebinop(Add, e, Eint64 Int64.one))}
+  | e = expr; DECR { Isassign (e, Ebinop(Minus, e, Eint64 Int64.one))}
   | le1 = separated_nonempty_list(COMMA, expr); EQUAL;  le2 = separated_nonempty_list(COMMA, expr)
-    { Isassign (le1, le2) }
+    { Isassign_list (le1, le2) }
   | lid = separated_nonempty_list(COMMA, expr); REF; le = separated_nonempty_list(COMMA, expr)
     { Isref (makeexpr_to_ident lid, le)};
 
+instr_if :
+  | IF; e = expr; b = block { (e, b, [])}
+  | IF; e = expr; b1 = block; ELSE; b2 = block { (e, b1, b2)}
+  | IF; e = expr; b1 = block; ELSE; b2 = instr_if { (e, b1, [ Iif b2]) };
+
 instr :
   | SEMICOL          { Inil }
-  | s = instr_simple { I_s  s }
-  | b  = block       { I_b  b }
-  | f = instr_if     { I_if f }
+  | s = instr_simple { Iinstrsimpl  s }
+  | b  = block       { Iblock  b }
+  | f = instr_if     { Iif f }
   | VAR; v = separated_nonempty_list(COMMA, IDENT); t = type_go? 
     { Ivar (v, checknone Nonetype_go t, [])}
   | VAR; v = separated_nonempty_list(COMMA, IDENT); t = type_go?; EQUAL; le =separated_nonempty_list(COMMA, expr)
@@ -123,22 +127,17 @@ instr :
   | RETURN; le = separated_list(COMMA, expr) 
     { Ireturn le }
   | FOR; b = block 
-    { Ifor ( Ebool true, b) }
+    { Ifor (Ebool true, b) }
   | FOR; e = expr; b = block 
     { Ifor (e, b) }
   | FOR; SEMICOL; e = expr; SEMICOL; b = block 
     { Ifor (e, b) }
   | FOR; SEMICOL; e = expr; SEMICOL; i2 = instr_simple; b = block 
-    { Ifor (e, b @ [I_s i2]) }
+    { Ifor (e, b @ [Iinstrsimpl i2]) }
   | FOR; i1 = instr_simple; SEMICOL; e = expr; SEMICOL; b = block 
-    { I_b [I_s i1; Ifor (e, b)] }
+    { Iblock [Iinstrsimpl i1; Ifor (e, b)] }
   | FOR; i1 = instr_simple; SEMICOL; e = expr; SEMICOL; i2 = instr_simple; b = block 
-    { I_b [I_s i1; Ifor (e, b @ [I_s i2])] }
-
-instr_if :
-  | IF; e = expr; b = block { (e, b, [])}
-  | IF; e = expr; b1 = block; ELSE; b2 = block { (e, b1, b2)}
-  | IF; e = expr; b1 = block; ELSE; b2 = instr_if { (e, b1, [ I_if b2]) }
+    { Iblock [Iinstrsimpl i1; Ifor (e, b @ [Iinstrsimpl i2])] }
 
   %inline binop:
     ISEQ  {Iseq}

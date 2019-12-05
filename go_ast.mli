@@ -17,8 +17,6 @@ type expr =
   | Eunop of unop * expr 
   | Ebinop of binop * expr * expr
 
-type incrdecr = Incr | Decr 
-
 type type_go =
   | Tident of string 
   | Tmult of type_go
@@ -31,15 +29,15 @@ type type_retour =
 
 type instr_simple =
   | Isexpr of expr
-  | Isid of incrdecr * expr
-  | Isassign of expr list * expr list
+  | Isassign of expr * expr
+  | Isassign_list of expr list * expr list
   | Isref of string list * expr list 
 
 type instr =
   | Inil 
-  | I_s of instr_simple
-  | I_b of block
-  | I_if of instr_if
+  | Iinstrsimpl of instr_simple
+  | Iblock of block
+  | Iif of instr_if
   | Ivar of string list * type_go * expr list 
   | Ireturn of expr list
   | Ifor of expr * block

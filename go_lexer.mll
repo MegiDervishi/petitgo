@@ -4,7 +4,7 @@ open Go_parser
 
 exception Lexing_error of string
 
-let keywords = Hashtbl.create 90
+let keywords = Hashtbl.create 10
 let () = List.iter (fun (s,t) -> Hashtbl.add keywords s t)
     ["else", ELSE; "for", FOR; "func", FUNC; "if", IF; 
     "import", IMPORT;  "package", PACKAGE; "struct", STRUCT;
@@ -29,7 +29,7 @@ let check_ident id =
 
 let check_int64 i =
   try INT ( Int64.of_string i )
-  with Failure _ -> raise (Lexing_error (i ^ " is larger than Int64_max"))
+  with Failure _ -> raise (Lexing_error (i ^ " is larger than max/min of Int64"))
 
 }
 let letters = ['a'-'z' 'A'-'Z' '_']
@@ -42,6 +42,7 @@ let strings = "\"" car* "\""
 let hexa = ("0x" | "0X") ['0'-'9' 'a'-'f' 'A'-'F']+
 let integer = digit+ | hexa
 let spaces = [ ' ' '\t' ]
+let int64min = ('-' spaces*  "9223372036854775808") | ('-' spaces* "0x8000000000000000")
 
 rule token = parse
   | "\n" 		{ check_semicol lexbuf token}
@@ -78,7 +79,8 @@ rule token = parse
   | "}"         	{ semicolon := true;  RBRACE }
   | ";"         	{ semicolon := false; SEMICOL}
   | ","         	{ semicolon := false; COMMA }
-  | integer as i 	{ semicolon := true; check_int64 i}
+  | int64min      { semicolon := true; INT Int64.min_int } 
+  | integer as i  { semicolon := true; check_int64 i}
   | strings as s 	{ semicolon := true; STRING s}
   | ident as id 	{ check_ident id}
   | eof         	{ EOF }
