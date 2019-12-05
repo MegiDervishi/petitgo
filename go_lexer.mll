@@ -45,15 +45,15 @@ let integer = digit+ | hexa
 let spaces = [ ' ' '\t' ]
 
 rule token = parse
-	| "\n" 					{ check_semicol lexbuf token}
-	| spaces+ 			{ token lexbuf }
-	| "/*"        	{ comment1 lexbuf }
+  | "\n" 		{ check_semicol lexbuf token}
+  | spaces+ 	{ token lexbuf }
+  | "/*"        	{ comment1 lexbuf }
   | "//"        	{ comment2 lexbuf }
   | "\"fmt\""   	{ semicolon := true; STRING "fmt" }
-	| "fmt"       	{ semicolon := true; IDENT "fmt"  }
+  | "fmt"       	{ semicolon := true; IDENT "fmt"  }
   | "main"      	{ semicolon := true; IDENT "main" }
   | "Print"     	{ semicolon := true; IDENT "Print"}
-	| "&&"        	{ semicolon := false; AND }
+  | "&&"        	{ semicolon := false; AND }
   | "||"        	{ semicolon := false; OR }
   | "=="        	{ semicolon := false; ISEQ }
   | "!="        	{ semicolon := false; NEQ }
@@ -79,20 +79,20 @@ rule token = parse
   | "}"         	{ semicolon := true;  RBRACE }
   | ";"         	{ semicolon := false; SEMICOL}
   | ","         	{ semicolon := false; COMMA }
-	| integer as i 	{ semicolon := true; check_int64 i}
-	| strings as s 	{ semicolon := true; STRING s}
+  | integer as i 	{ semicolon := true; check_int64 i}
+  | strings as s 	{ semicolon := true; STRING s}
   | ident as id 	{ check_ident id}
-	| eof         	{ EOF }
+  | eof         	{ EOF }
   | _ 		        { raise (Lexing_error "Unknown Character")}
 
 and comment1 = parse
     | "*/" 	{ token lexbuf}
     | "\n" 	{ new_line lexbuf; comment1 lexbuf}
-    | _ 	 	{ comment1 lexbuf}
+    | _ 	{ comment1 lexbuf}
     | eof 	{ raise (Lexing_error "Unterminated Comment")}
 
 and comment2 = parse
     | "\n" 	{ check_semicol lexbuf token }
-    | _ 		{ comment2 lexbuf}
+    | _ 	{ comment2 lexbuf}
     | eof 	{ raise (Lexing_error "Unterminated Comment")}
 
