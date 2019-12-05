@@ -65,7 +65,7 @@ let () =
         exit 0
   )
     with
-    | Go_lexer.LexingError c ->
+    | Go_lexer.Lexing_error c ->
 	(* Erreur lexicale. On récupère sa position absolue et
 	   on la convertit en numéro de ligne *)
 	localisation (Lexing.lexeme_start_p buf);

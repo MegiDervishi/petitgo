@@ -32,7 +32,7 @@ pgo: $(CMO)
 clean:
 	rm -f *.cm[io] *.cmt[io] *.o *.annot *~ pgo $(GENERATED)
 	rm -f go_parser.output go_parser.automaton
-	rm -f go_parser.conflicts go_parser.cmt go_main.cmt go_lexer.cmt
+	rm -f go_parser.conflicts go_parser.cmt main.cmt go_lexer.cmt
 	rm -f main.cmt
 
 .depend depend:$(GENERATED)
