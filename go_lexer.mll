@@ -18,12 +18,11 @@ let semicolon = ref false;;
 
 let check_semicol lexbuf token_ = Lexing.new_line lexbuf;
 	if !semicolon then 
-		begin semicolon := false; SEMICOL end 
+	   begin semicolon := false; SEMICOL end 
 	else token_ lexbuf
 
 let check_ident id = 
-	try 
-		begin semicolon := false; Hashtbl.find keywords id end 
+	try begin semicolon := false; Hashtbl.find keywords id end 
 	with Not_found -> semicolon := true;
 		try Hashtbl.find keys_colon id
 		with Not_found -> (IDENT id)
@@ -37,7 +36,7 @@ let letters = ['a'-'z' 'A'-'Z' '_']
 let digit = ['0'-'9']
 let ident = letters (letters | digit)*
 
-let car =	 [' ' '!' '#' - '[' ']' - '~'] | "\\\\" | "\\\"" | "\\n" | "\\t"
+let car = [' ' '!' '#' - '[' ']' - '~'] | "\\\\" | "\\\"" | "\\n" | "\\t"
 let strings = "\"" car* "\""
 
 let hexa = ("0x" | "0X") ['0'-'9' 'a'-'f' 'A'-'F']+
@@ -46,7 +45,7 @@ let spaces = [ ' ' '\t' ]
 
 rule token = parse
   | "\n" 		{ check_semicol lexbuf token}
-  | spaces+ 	{ token lexbuf }
+  | spaces+ 		{ token lexbuf }
   | "/*"        	{ comment1 lexbuf }
   | "//"        	{ comment2 lexbuf }
   | "\"fmt\""   	{ semicolon := true; STRING "fmt" }
