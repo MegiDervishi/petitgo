@@ -4,43 +4,46 @@
 
   exception LexingError of string
 
-  let keywords = Hashtbl.create 99
+  let keywords = Hashtbl.create 9
   let () = List.iter (fun (s,t) -> Hashtbl.add keywords s t)
       ["else", ELSE; "for", FOR; "func", FUNC; "if", IF; 
       "import", IMPORT;  "package", PACKAGE; "struct", STRUCT;
       "type", TYPE; "var", VAR;]
-  let keys_colon = Hashtbl.create 3
+  let keys_colon = Hashtbl.create 4
   let () = List.iter (fun (s,t) -> Hashtbl.add keys_colon s t)
       ["true", TRUE;"false", FALSE;"nil", NIL; "return", RETURN;]
+
+  let semicolon = ref false;;
+}
 
   let alpha = ['a'-'z' 'A'-'Z' '_']
   let number = ['0'-'9']
   let ident = alpha (alpha | number)*
+  let spaces = [ ' ' '\t' ]
 
   let hexa = ['0'-'9' 'a'-'f' 'A'-'F']
-  let entier = number+ | (('0x' '0X') hexa+)
+  let entier = number+ | (("0x" "0X") hexa+)
 
   (*possible error '\'*)
-  let car = [' '| '!'| '#'-'['| ']'-'~'| "\\\\"| "\\\""| "\\n"| "\\t"]
+  let car = [' ' '!' '#'-'[' ']'-'~'] |"\\\\"|  "\\\""| "\\n"| "\\t"
   let chaine = "\"" car* "\""
 
-  let space = [' ' '\t']
-  let semicolon = ref false;
-}
-
 rule token = parse
-  | "\n"        { new_line lexbuf; 
-                if !semicolon then semicolon:= false; SEMICOL
-                else token lexbuf }
-  | space+      { token lexbuf }
+  | entier as e { semicolon := true; STRING e }
+  | "\"fmt\""   { semicolon := true; STRING "fmt" }
   | "main"      { semicolon := true; IDENT "main" }
   | "Print"     { semicolon := true; IDENT "Print"}
-  | "\"fmt\""   { semicolon := true; STRING "fmt" }
   | "fmt"       { semicolon := true; IDENT "fmt"  }
+  | chaine as c { semicolon := true; STRING c }
   | "/*"        { comment1 lexbuf }
   | "//"        { comment2 lexbuf }
-  | entier as e { semicolon := true; STRING e }
-  | chaine as c { semicolon := true; STRING c }
+  | spaces+     { token lexbuf }
+  | "\n"        {Lexing.new_line lexbuf;
+		            if !semicolon then begin
+                semicolon := false;
+                SEMICOL
+              end else
+                token lexbuf}
   | "&&"        { semicolon := false; AND }
   | "||"        { semicolon := false; OR }
   | "=="        { semicolon := false; ISEQ }
@@ -48,7 +51,7 @@ rule token = parse
   | ">"         { semicolon := false; GT }
   | ">="        { semicolon := false; GEQ }
   | "<"         { semicolon := false; LT }
-  | "<="        { semicolon := false; LE }
+  | "<="        { semicolon := false; LEQ }
   | ":="        { semicolon := false; REF }
   | "="         { semicolon := false; EQUAL}
   | "++"        { semicolon := true;  INCR }
@@ -70,23 +73,22 @@ rule token = parse
   | ident as id {
                 semicolon := false;
                 try Hashtbl.find keywords id
-                with Not_found -> semicolon = true;
+                with Not_found -> semicolon := true;
                     try Hashtbl.find keys_colon id 
-                    with Not_found -> IDENT id }
+                    with Not_found -> (IDENT id) }
   | eof         { EOF }
-  | _ as c      { raise (LexingError "Unknown Character in string: " ^ 
-                (if c = '\n' then "\\n" else String.make 1 c))}
+  | _           { raise (LexingError "Unknown Character in string: ")}
 
 
 and comment1 = parse
   | "*/"  { token lexbuf }
-  | "\n"  { new_line token; comment1 lexbuf}
+  | '\n'  { new_line lexbuf; comment1 lexbuf}
   | _     { comment1 lexbuf }
   | eof   { raise (LexingError "Unterminated Comment" )}
 
 and comment2 = parse
   | "\n"  { new_line lexbuf; 
-            if !semicolon then semicolon:= false; SEMICOL
+            if !semicolon then begin semicolon:= false; SEMICOL end 
             else token lexbuf}
   | _     { comment2 lexbuf }
   | eof   { raise (LexingError "Unterminated Comment" ) }

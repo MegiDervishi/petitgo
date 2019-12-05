@@ -1,3 +1,8 @@
 go_ast.cmi :
-main.cmo :
-main.cmx :
+go_lexer.cmo : go_parser.cmi
+go_lexer.cmx : go_parser.cmx
+go_parser.cmo : go_ast.cmi go_parser.cmi
+go_parser.cmx : go_ast.cmi go_parser.cmi
+go_parser.cmi : go_ast.cmi
+main.cmo : go_parser.cmi go_lexer.cmo
+main.cmx : go_parser.cmx go_lexer.cmx

@@ -1,17 +1,15 @@
-CMO=main.cmo
-#go_lexer.cmo go_parser.cmo main.cmo
-GENERATED = 
-# go_lexer.ml go_parser.ml go_parser.mli
-FLAGS=-annot -g
+CMO=go_lexer.cmo go_parser.cmo main.cmo
+GENERATED = go_lexer.ml go_parser.ml go_parser.mli
+FLAGS=-annot -g -bin-annot
 
-all: petitgo
-	cd tests && ./test -n ../petitgo
+all: pgo
+	./pgo test.go
 
 .PHONY: tests
-tests: petitgo
-	bash run-tests
+tests: pgo
+	 cd tests && ./test.sh -1 ../pgo
 
-petitgo: $(CMO)
+pgo: $(CMO)
 	ocamlc $(FLAGS) -o $@ nums.cma $(CMO)
 
 .SUFFIXES: .mli .ml .cmi .cmo .mll .mly
@@ -32,10 +30,10 @@ petitgo: $(CMO)
 	menhir -v $<
 
 clean:
-	rm -f *.cm[io] *.o *.annot *~ petitgo $(GENERATED)
+	rm -f *.cm[io] *.cmt[io] *.o *.annot *~ pgo $(GENERATED)
 	rm -f go_parser.output go_parser.automaton
-
-go_parser.ml: go_ast.cmi
+	rm -f go_parser.conflicts go_parser.cmt go_main.cmt go_lexer.cmt
+	rm -f main.cmt
 
 .depend depend:$(GENERATED)
 	rm -f .depend

@@ -1,12 +1,12 @@
 type type_go =
   | Tident of string 
   | Tmult of type_go
-  | Nonetype
+  | Nonetype_go
 
 type type_retour = 
   | Tretour of type_go
   | Tretour_list of type_go list 
-  | Nonetype
+  | Nonetype_ret
 
 type constant = 
   | Cstring of string 
@@ -22,7 +22,7 @@ type binop = Iseq| Neq  | Lt| Leq | Gt | Geq|
 type expr = 
   | Econst of constant
   | Evar of string
-  | Edot of expr * string
+  | Emethod of expr * string
   | Ecall of string * expr list 
   | Eprint of expr list 
   | Eunop of unop * expr 
@@ -35,29 +35,27 @@ type instr_simple =
   | Isid of incrdecr * expr
   | Isequal of expr list * expr list
   | Isref of string list * expr list 
-  | Nonetype
+  (*| Nonetype_is*)
 
-type instr = 
+type instr =
+  | Inil 
   | I_s of instr_simple
   | I_b of block
   | I_if of instr_if
   | Ivar of string list * type_go * expr list 
   | Ireturn of expr list
   | Ifor of expr * block
-  | Ifor_ieb of instr_simple * expr * instr_simple * block (* recheck *)
-
+  (*| Ifor_ieb of instr_simple * expr * instr_simple * block  *)
 and block = instr list 
-
 and instr_if = expr * block * block
 
 type vars = string list * type_go
-
+type gofunc = string * vars list * type_retour * block
 type structure = string * vars list 
 
-type funct = string * vars list * type_retour * block
 
 type decl = 
   | Dstruct of structure
-  | Dfunc of funct
+  | Dfunc of gofunc
 
 type program = decl list 
