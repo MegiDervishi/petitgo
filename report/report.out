@@ -1,0 +1,6 @@
+\BOOKMARK [1][-]{section.1}{Organisation}{}% 1
+\BOOKMARK [2][-]{subsection.1.1}{Compiling the project}{section.1}% 2
+\BOOKMARK [1][-]{section.2}{Implementation}{}% 3
+\BOOKMARK [2][-]{subsection.2.1}{Abstrac Syntactic tree }{section.2}% 4
+\BOOKMARK [2][-]{subsection.2.2}{Lexer and Parser}{section.2}% 5
+\BOOKMARK [2][-]{subsection.2.3}{Typing}{section.2}% 6

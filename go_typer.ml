@@ -218,7 +218,7 @@ let rec type_expr env le_pos =
           with Not_found -> raise_error (Notfound_funct id) pos 
       | _ -> assert false
 
-(* Type Instructions:  type_instruction -> 'a -> 'b -> 'c -> 'a * 'd * bool * bool   *)
+(* Type Instructions: 'a -> 'b -> 'c -> 'a * 'd * bool * bool   *)
 (* returns (env, tree, ret_bool, print_bool) 
   where if there is a return ret_bool = true and if there is a print print_bool =true *)
 and type_instruction env trets = function 

@@ -1,0 +1,138 @@
+\documentclass{article}
+
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{verbatim}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[pdftex, pdftitle={Rapport de projet}, pdfsubject={}, colorlinks=true, linkcolor=black]{hyperref}
+
+\title{
+  Compilation Project - Part 1: PetitGo}
+
+\author{Megi Dervishi}
+
+\begin{document}
+\maketitle
+
+\section{Organisation}
+The project is written in \texttt{Ocaml} using also \texttt{Ocamllex} and \texttt{Menhir}. The github page for the project can be seen in this link. The project is composed by the below files
+
+\begin{description}
+\item[main] Execution of the program
+\item[go\_ast] Declaratation of the abstract syntax used during parsing
+\item [go\_parser , go\_lexer] Parsing and lexing
+\item [go\_typer] Typing functions
+\item [Makefile]
+\end{description}
+The project contains as well the folder \texttt{tests} and inside of it the automatic testing script \texttt{tester.sh}.
+
+\subsection{Compiling the project}
+
+There are three options that the program could use before compiling:
+\begin{description}
+\item[-v] Mode verbeux.
+\item[-\-parse-only] L'éxécution s'arrête après le parsage.
+\item[-\-type-only] L'éxécution s'arrête après le typage.
+\end{description}
+
+In order to test a particular function type it (copy/paste) in the file \texttt{test.go} and run \texttt{make}. To run the automatic tests then execute 
+\begin{verbatim}
+make tests
+\end{verbatim}
+
+\section{Implementation}
+\subsection{Abstrac Syntactic tree }
+
+As previously mentioned the abstract syntax is defined in the file \texttt{go\_ast.ml} following the rules explained in the project. In particular below there are the representation of the expression and instruction types,
+
+\begin{verbatim}
+and constant = 
+| Eint64   of int64
+| Estring  of string
+| Ebool    of bool
+| Econst   of constant
+| ENil
+
+and expr =
+| Econst   of constant
+| Eident   of string
+| Emethod  of expr loc * ident loc
+| Eprint   of expr loc list
+| Ecall    of ident loc * expr loc list
+| Eunop    of unop * expr loc
+| Ebinop   of binop * expr loc * expr loc
+
+and instr =
+  Inop
+| Iexpr   of expr loc
+| Iasgn   of expr loc * expr loc
+| Iblock  of instruction list
+| Idecl   of ident loc list * ty loc * expr loc
+| Ireturn of expr loc
+| Ifor    of expr loc * instr
+| Iif     of expr loc * instr * instr
+\end{verbatim}
+Furthermore to handle the localisation of types I introduced \texttt{'a loc} which is helps in keeping track of the position of the particular type.
+\begin{verbatim}
+type tuple = Lexing.position * Lexing.position
+type 'a loc = 'a * tuple
+\end{verbatim}
+
+\subsection{Lexer and Parser}
+
+The lexer and parser were also implemented as on the rules described in the subject report. 
+In the lexer there are two hash-tables one of which implements the tokens that require a semicolon after their calling and the other that do not. Then I use the reference bool \texttt{semicolon} which is \texttt{true} if semicolon is required and the function \texttt{check\_semicolon} which updates the pointer after an empty line. 
+In the parser there are certain helpful functions (\texttt{blabla} ) which were implemented to \texttt{option} types i.e. supporting \texttt{None} as part of their syntax. 
+
+\subsection{Typing}
+
+Certainly the typer was more challenging than the parser and lexer. The typer has the following main/representative types:
+
+\begin{verbatim}
+type typ =
+| Tint
+| Tbool
+| Tstring
+| Tstruct of ident
+| Tstar   of typ
+| Tnone
+| Tvoid   (* used for "_" *)
+\end{verbatim}
+
+\begin{verbatim}
+type gotype =
+| Tsimpl  of typ
+| Tmany   of gotype 
+\end{verbatim}
+
+The environment stores the struct, functions and variables of the program in the following way. \begin{verbatim}
+type tstruct = (typ Smap.t ) Smap.t
+type tfunct  = (gotype * gotype) Smap.t  
+type tvars   = typ Smap.t 
+type typenv  = { structs: tstruct; funct : tfunct; vars : tvars }   
+\end{verbatim}
+The most important typer functions are the following:
+\begin{verbatim}
+1) type_expr:  typenv -> 'a * 'b -> gotype * 'c * 'b * bool  
+2) type_instruction : 'a -> 'b -> 'c -> 'a * 'd * bool * bool
+3) add_functions_to_env : typenv -> 'a -> typenv
+4) add_struct_to_env:  typenv -> '_a -> typenv
+5) type_prog:  '_a list -> typenv * '_b lis
+\end{verbatim}
+For \texttt{type\_expr} if the bool is true then the expression was a left value. 
+For \texttt{type\_instruction} there are two bool types. The first one is the \texttt{return\_bool} which is \texttt{true} if there was a \texttt{return} in the instructions and the second one is \texttt{print\_bool} which is \texttt{true} if there was a \texttt{Print} in the instructions.
+
+\section*{Improvements}
+Well the first improvement from this moment is to make a fully functioning Typer which passes all the tests. Furthermore at this moment I am mostly using the exception of \texttt{Typing\_error}. My goal is create a much more eloquent error handling. Consequently also would like to create better printing functions for the error messages which are more precise in localising/visualizing where the error is to the user. For example: \begin{verbatim}
+1:
+2: func f() { var x = &3 }
+   -------------------^---
+\end{verbatim}
+
+\section*{Conclusion}
+Overall the project was an interesting challenge which sometimes was a bit difficult as I have learned to code in \texttt{Ocaml} only recently and do not posses yet all the "programming tricks". My parser passed all the automatic tests which I am very happy about. The Typer was definetly more difficult especially since I had many small errors with the \texttt{loc} which were not allowing me to compile the Typer.  Nonetheless I will continue working on it and improving as mentioned above.
+
+
+\end{document}
