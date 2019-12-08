@@ -4,5 +4,7 @@ go_lexer.cmx : go_parser.cmx
 go_parser.cmo : go_ast.cmi go_parser.cmi
 go_parser.cmx : go_ast.cmi go_parser.cmi
 go_parser.cmi : go_ast.cmi
-main.cmo : go_parser.cmi go_lexer.cmo
-main.cmx : go_parser.cmx go_lexer.cmx
+go_typer.cmo : go_ast.cmi
+go_typer.cmx : go_ast.cmi
+main.cmo : go_typer.cmo go_parser.cmi go_lexer.cmo
+main.cmx : go_typer.cmx go_parser.cmx go_lexer.cmx

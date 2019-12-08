@@ -5,7 +5,7 @@ open Lexing
 
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
-(*let type_only = ref false*)
+let type_only = ref false
 
 (* Noms des fichiers source et cible *)
 let ifile = ref ""
@@ -17,8 +17,8 @@ let set_file f s = f := s
 let options =
   ["--parse-only", Arg.Set parse_only,
    "  Pour faire uniquement l'analyse syntaxique";
-   (*"--type-only", Arg.Set type_only,
-   "  Pour faire uniquement l'analyse syntaxique et le typage"*)]
+   "--type-only", Arg.Set type_only,
+   "  Pour faire uniquement l'analyse syntaxique et le typage"]
 
 let usage = "usage: go [option] file.logo"
 
@@ -60,8 +60,8 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0
     else
-        (*let env,functions = Typer.typage p in
-        print_string "typage ok\n";*)
+        let env,functions = Go_typer.type_prog p in
+        print_string "typage ok\n";
         exit 0
   )
     with

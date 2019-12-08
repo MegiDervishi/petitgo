@@ -5,11 +5,14 @@
   let checknone typenone  = function
     | None -> typenone
     | Some t -> t
-  
+  let checknone_loc typenone locs = 
+    let (ty, pos) = locs in (checknone typenone ty, pos)
+
   let rec makeexpr_to_ident = function
     | (Eident i) :: x -> i :: (makeexpr_to_ident x)
     | [] -> []
     | _ -> raise ParsingError
+
 %}
 
 /* Declare tokens */
@@ -41,6 +44,10 @@
 /* Grammar rules */
 %%
 
+%inline loc(X):
+  | x = X {x, ($startpos, $endpos)}
+;
+
 sep_list_plus(sep, X):
     | x = X; sep? { [x] }
     | x = X; sep; xs = sep_list_plus(sep, X) { x::xs };
@@ -52,92 +59,103 @@ program :
     { if id = "main" then d else raise ParsingError};
 
 decl : 
-  | s = structure { s }
-  | f = gofunc    { f }
+  | s = loc(structure) { Dstruct s }
+  | f = loc(gofunc)    { Dfunc f }
 
 structure:
-  | TYPE; id = IDENT; STRUCT; LBRACE; v = sep_list_plus(SEMICOL, vars) ; RBRACE; SEMICOL
-    { Dstruct(id, v) }
+  | TYPE; id = IDENT; STRUCT; LBRACE; v = sep_list_plus(SEMICOL, loc(vars)) ; RBRACE; SEMICOL
+    { (id, v) }
   | TYPE; id = IDENT; STRUCT; LBRACE; RBRACE; SEMICOL
-    { Dstruct(id, []) }
+    { (id, []) }
 
 gofunc :
-  | FUNC; id = IDENT; LPAREN; v = sep_list_plus(COMMA, vars); RPAREN; tr = type_retour?; b = block; SEMICOL
-    { Dfunc(id, v, checknone Nonetype_ret tr, b )} (* main (a b,)*)
-  | FUNC; id = IDENT; LPAREN; RPAREN; tr = type_retour?; b = block; SEMICOL
-    { Dfunc(id, [] , checknone Nonetype_ret tr, b )} (* main () *)
+  | FUNC; id = IDENT; LPAREN; v = sep_list_plus(COMMA, loc(vars)); RPAREN; tr = loc(type_retour?); b = loc(block); SEMICOL
+    { (id, v, checknone_loc Nonetype_ret tr, b )} (* main (a b,)*)
+  | FUNC; id = IDENT; LPAREN; RPAREN; tr = loc(type_retour?); b = loc(block); SEMICOL
+    { (id, [] , checknone_loc Nonetype_ret tr, b )} (* main () *)
   
 vars :
-  | l_id = separated_nonempty_list(COMMA, IDENT); t = type_go { (l_id , t)};
+  | l_id = separated_nonempty_list(COMMA, IDENT); t = loc(type_go) { (l_id , t)};
 
 type_retour :
-  | t = type_go { Tretour t }
-  | LPAREN; l_t = sep_list_plus(COMMA,type_go); RPAREN 
+  | t = loc(type_go) { Tretour t }
+  | LPAREN; l_t = sep_list_plus(COMMA, loc(type_go)); RPAREN 
     { Tretour_list l_t };
 
 type_go :
-  | id = IDENT          { Tident id }
-  | MULT; tg = type_go  { Tmult tg };
+  | id = IDENT               { Tident id }
+  | MULT; tg = loc(type_go)  { Tmult tg };
 
-expr :
+constant :
   | i = INT     { Eint64 i }
   | s = STRING  { Estring s }
   | TRUE        { Ebool true  }
   | FALSE       { Ebool false }
-  | id = IDENT  { Eident id }
   | NIL         { ENil }
+
+expr :
+  | c = constant { Econst c }
+  | id = IDENT  { Eident id }
   | LPAREN; e = expr; RPAREN    { e }
-  | e = expr; DOT; i = IDENT    { Emethod (e, i) }
-  | id = IDENT; LPAREN; le = separated_list(COMMA, expr); RPAREN 
+  | e = loc(expr); DOT; i = IDENT    { Emethod (e, i) }
+  | id = IDENT; LPAREN; le = separated_list(COMMA, loc(expr)); RPAREN 
     { Ecall (id, le) }
-  | f = expr; DOT; p = IDENT; LPAREN; le = separated_list(COMMA, expr); RPAREN
-    { if f= Eident "fmt" && p="Print" then Eprint le else raise ParsingError }
-  | MINUS; e = expr             { Ebinop (Minus, Eint64 Int64.zero, e)  } %prec sign
-  | MULT; e = expr              { Eunop (Pointer, e)   } %prec pointer
-  | op = unop1 ; e = expr       { Eunop (op, e)}
-  | e1 = expr; op = binop; e2 = expr { Ebinop (op, e1, e2)};
+  | f = expr; DOT; p = IDENT; LPAREN; le = separated_list(COMMA, loc(expr)); RPAREN 
+    { if f = Eident "fmt" && p="Print" then Eprint le else raise ParsingError }
+  | MINUS; e = loc(expr)   %prec sign          
+    { Ebinop (Minus, (Econst (Eint64 Int64.zero) , ($startpos,$endpos)), e)  } 
+  | MULT; e = loc(expr)              { Eunop (Pointer, e)   } %prec pointer
+  | op = unop1 ; e = loc(expr)       { Eunop (op, e)}
+  | e1 = loc(expr); op = binop; e2 = loc(expr) { Ebinop (op, e1, e2)};
 
 block :
-  | LBRACE; bl = sep_list_plus(SEMICOL, instr); RBRACE { bl }
+  | LBRACE; bl = sep_list_plus(SEMICOL, loc(instr)); RBRACE { bl }
   | LBRACE; RBRACE { [] };
 
 instr_simple :
-  | e = expr       { Isexpr e }
-  | e = expr; INCR { Isassign (e, Ebinop(Add, e, Eint64 Int64.one))}
-  | e = expr; DECR { Isassign (e, Ebinop(Minus, e, Eint64 Int64.one))}
-  | le1 = separated_nonempty_list(COMMA, expr); EQUAL;  le2 = separated_nonempty_list(COMMA, expr)
+  | e = loc(expr) { Isexpr e }
+  | e = loc(expr); INCR 
+    { Isassign (e, (Ebinop(Add, e, (Econst (Eint64 Int64.one), ($startpos,$endpos))),($startpos,$endpos)))} 
+  | e = loc(expr); DECR
+    { Isassign (e, (Ebinop(Minus, e, (Econst (Eint64 Int64.one), ($startpos,$endpos))),($startpos,$endpos)))} 
+  | le1 = separated_nonempty_list(COMMA, loc(expr)); EQUAL; le2 = separated_nonempty_list(COMMA, loc(expr))
     { Isassign_list (le1, le2) }
-  | lid = separated_nonempty_list(COMMA, expr); REF; le = separated_nonempty_list(COMMA, expr)
+  | lid = separated_nonempty_list(COMMA, expr); REF; le = separated_nonempty_list(COMMA, loc(expr))
     { Isref (makeexpr_to_ident lid, le)};
 
 instr_if :
-  | IF; e = expr; b = block { (e, b, [])}
-  | IF; e = expr; b1 = block; ELSE; b2 = block { (e, b1, b2)}
-  | IF; e = expr; b1 = block; ELSE; b2 = instr_if { (e, b1, [ Iif b2]) };
+  | IF; e = loc(expr); b = loc(block) { (e, b, ([],($startpos, $endpos)))}
+  | IF; e = loc(expr); b1 = loc(block); ELSE; b2 = loc(block) { (e, b1, b2)}
+  | IF; e = loc(expr); b = loc(block); ELSE; i = loc(instr_if) 
+    { let _,pos = i in (e, b, ([(Iif i,pos)],pos))};
 
 instr :
-  | SEMICOL          { Inil }
-  | s = instr_simple { Iinstrsimpl  s }
-  | b  = block       { Iblock  b }
-  | f = instr_if     { Iif f }
-  | VAR; v = separated_nonempty_list(COMMA, IDENT); t = type_go? 
-    { Ivar (v, checknone Nonetype_go t, [])}
-  | VAR; v = separated_nonempty_list(COMMA, IDENT); t = type_go?; EQUAL; le =separated_nonempty_list(COMMA, expr)
-    { Ivar (v , checknone Nonetype_go t, le) }
-  | RETURN; le = separated_list(COMMA, expr) 
+  | SEMICOL               { Inil }
+  | s = loc(instr_simple) { Iinstrsimpl s }
+  | b = loc(block)        { Iblock  b }
+  | f = loc(instr_if)     { Iif f }
+  | VAR; v = separated_nonempty_list(COMMA, IDENT); t = loc(type_go?) 
+    { Ivar (v, checknone_loc Nonetype_go t, [])}
+  | VAR; v = separated_nonempty_list(COMMA, IDENT); t = loc(type_go?); EQUAL; le =separated_nonempty_list(COMMA, loc(expr))
+    { Ivar (v , checknone_loc Nonetype_go t, le) }
+  | RETURN; le = separated_list(COMMA, loc(expr)) 
     { Ireturn le }
-  | FOR; b = block 
-    { Ifor (Ebool true, b) }
-  | FOR; e = expr; b = block 
+  | FOR; b = loc(block) 
+    { let _,pos = b in Ifor((Econst (Ebool true),pos), b)}
+  | FOR; e = loc(expr); b = loc(block) 
     { Ifor (e, b) }
-  | FOR; SEMICOL; e = expr; SEMICOL; b = block 
+  | FOR; SEMICOL; e = loc(expr); SEMICOL; b = loc(block) 
     { Ifor (e, b) }
-  | FOR; SEMICOL; e = expr; SEMICOL; i2 = instr_simple; b = block 
-    { Ifor (e, b @ [Iinstrsimpl i2]) }
-  | FOR; i1 = instr_simple; SEMICOL; e = expr; SEMICOL; b = block 
-    { Iblock [Iinstrsimpl i1; Ifor (e, b)] }
-  | FOR; i1 = instr_simple; SEMICOL; e = expr; SEMICOL; i2 = instr_simple; b = block 
-    { Iblock [Iinstrsimpl i1; Ifor (e, b @ [Iinstrsimpl i2])] }
+  | FOR; SEMICOL; e = loc(expr); SEMICOL; i2 = loc(instr_simple); b = loc(block) 
+    { let tb, pos1 = b in let _, pos2 = i2 in 
+      Ifor (e, (tb @ [(Iinstrsimpl i2, pos2)], pos1)) }
+  | FOR; i = loc(instr_simple); SEMICOL; e = loc(expr); SEMICOL; b = loc(block) 
+    { let _,pos1 = i in 
+      Iblock ([(Iinstrsimpl i, pos1); (Ifor (e, b),($startpos,$endpos))],($startpos,$endpos))}
+  | FOR; i1 = loc(instr_simple); SEMICOL; e = loc(expr); SEMICOL; i2 = loc(instr_simple); b = loc(block) 
+    { let _,pos1 = i1 in let _,pos2 = i2 in let tb, pos3 = b in 
+    Iblock ([(Iinstrsimpl i1, pos1); (Ifor (e, (tb@[(Iinstrsimpl i2, pos2)],pos1)),($startpos,$endpos))], ($startpos,$endpos))}
+
 
   %inline binop:
     ISEQ  {Iseq}

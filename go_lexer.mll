@@ -45,8 +45,8 @@ let spaces = [ ' ' '\t' ]
 let int64min = ('-' spaces*  "9223372036854775808") | ('-' spaces* "0x8000000000000000")
 
 rule token = parse
-  | "\n" 		{ check_semicol lexbuf token}
-  | spaces+ 		{ token lexbuf }
+  | "\n" 		      { check_semicol lexbuf token}
+  | spaces+ 		  { token lexbuf }
   | "/*"        	{ comment1 lexbuf }
   | "//"        	{ comment2 lexbuf }
   | "\"fmt\""   	{ semicolon := true; STRING "fmt" }
@@ -89,11 +89,11 @@ rule token = parse
 and comment1 = parse
     | "*/" 	{ token lexbuf}
     | "\n" 	{ new_line lexbuf; comment1 lexbuf}
-    | _ 	{ comment1 lexbuf}
+    | _ 	  { comment1 lexbuf}
     | eof 	{ raise (Lexing_error "Unterminated Comment")}
 
 and comment2 = parse
     | "\n" 	{ check_semicol lexbuf token }
-    | _ 	{ comment2 lexbuf}
+    | _ 	  { comment2 lexbuf}
     | eof 	{ raise (Lexing_error "Unterminated Comment")}
 
