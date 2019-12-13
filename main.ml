@@ -2,6 +2,7 @@
 
 open Format
 open Lexing
+open Go_error
 
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
@@ -23,10 +24,6 @@ let options =
 let usage = "usage: go [option] file.logo"
 
 (* localise une erreur en indiquant la ligne et la colonne *)
-let localisation pos =
-  let l = pos.pos_lnum in
-  let c = pos.pos_cnum - pos.pos_bol + 1 in
-  eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l (c-1) c
 
 let () =
   (* Parsing de la ligne de commande *)
@@ -66,13 +63,14 @@ let () =
   )
     with
     | Go_lexer.Lexing_error c ->
-      localisation (Lexing.lexeme_start_p buf);
+      localisation ifile (Lexing.lexeme_start_p buf);
       eprintf "Erreur lexicale: %s@." c;
       exit 1
     | Go_parser.Error ->
-      localisation (Lexing.lexeme_start_p buf);
+      localisation ifile (Lexing.lexeme_start_p buf);
       eprintf "Erreur syntaxique@.";
       exit 1
     | Go_typer.Typing_error -> 
+      localisation ifile (Lexing.lexeme_start_p buf);
       eprintf "Erreur de typage@.";
       exit 1
