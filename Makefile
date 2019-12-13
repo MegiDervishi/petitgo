@@ -7,7 +7,7 @@ all: pgo
 
 .PHONY: tests
 tests: pgo
-	 cd tests && ./test.sh -1 ../pgo
+	 cd tests && ./test.sh -2 ../pgo -parse
 
 pgo: $(CMO)
 	ocamlc $(FLAGS) -o $@ nums.cma $(CMO)

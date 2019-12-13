@@ -1,6 +1,5 @@
 %{
   open Go_ast
-  exception ParsingError
 
   let checknone typenone  = function
     | None -> typenone
@@ -11,7 +10,7 @@
   let rec makeexpr_to_ident = function
     | (Eident i) :: x -> i :: (makeexpr_to_ident x)
     | [] -> []
-    | _ -> raise ParsingError
+    | _ -> raise Error
 
 %}
 
@@ -54,9 +53,9 @@ sep_list_plus(sep, X):
 
 program :
   | PACKAGE; id = IDENT; SEMICOL; IMPORT; s = STRING; SEMICOL; d = decl* ; EOF
-    { if id = "main" && s = "fmt" then d else raise ParsingError }
+    { if id = "main" && s = "fmt" then d else raise Error }
   | PACKAGE; id = IDENT; SEMICOL; d = decl*; EOF
-    { if id = "main" then d else raise ParsingError};
+    { if id = "main" then d else raise Error};
 
 decl : 
   | s = loc(structure) { Dstruct s }
@@ -101,7 +100,7 @@ expr :
   | id = IDENT; LPAREN; le = separated_list(COMMA, loc(expr)); RPAREN 
     { Ecall (id, le) }
   | f = expr; DOT; p = IDENT; LPAREN; le = separated_list(COMMA, loc(expr)); RPAREN 
-    { if f = Eident "fmt" && p="Print" then Eprint le else raise ParsingError }
+    { if f = Eident "fmt" && p="Print" then Eprint le else raise Error }
   | MINUS; e = loc(expr)   %prec sign          
     { Ebinop (Minus, (Econst (Eint64 Int64.zero) , ($startpos,$endpos)), e)  } 
   | MULT; e = loc(expr)              { Eunop (Pointer, e)   } %prec pointer

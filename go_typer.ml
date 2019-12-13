@@ -106,7 +106,7 @@ let varlist_to_typego vars = begin
 let varlist_to_gotype env vars = typego_to_gotype env (varlist_to_typego vars)
 
 
-let rec check_duplicate (list : ident loc list) = match list with
+let rec check_duplicate (mylist : ident loc list) = match mylist with
   | [] -> false
   | (id, pos) :: l -> 
   if List.exists (fun (y,_) -> id = y) l
@@ -287,7 +287,7 @@ let type_function env ((id, vars, (trets, tpos), block),pos) =
 
 (* Combine all functions *)
 let type_prog prog = 
-let env = { structs= Smap.empty; funct = Smap.empty ; vars = Smap.empty }  in
+  let env = { structs= Smap.empty; funct = Smap.empty ; vars = Smap.empty }  in
   let env = List.fold_left add_struct_to_env env prog in
   let env = List.fold_left add_function_to_env env prog in
   let rec read_function is_print = function

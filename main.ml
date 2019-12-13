@@ -66,16 +66,13 @@ let () =
   )
     with
     | Go_lexer.Lexing_error c ->
-	(* Erreur lexicale. On récupère sa position absolue et
-	   on la convertit en numéro de ligne *)
-	localisation (Lexing.lexeme_start_p buf);
-	eprintf "Erreur lexicale: %s@." c;
-	exit 1
+      localisation (Lexing.lexeme_start_p buf);
+      eprintf "Erreur lexicale: %s@." c;
+      exit 1
     | Go_parser.Error ->
-	(* Erreur syntaxique. On récupère sa position absolue et on la
-	   convertit en numéro de ligne *)
-	localisation (Lexing.lexeme_start_p buf);
-	eprintf "Erreur syntaxique@.";
-        exit 1
-    | _ -> eprintf "Erreur de typage@.";
-        exit 1
+      localisation (Lexing.lexeme_start_p buf);
+      eprintf "Erreur syntaxique@.";
+      exit 1
+    | Go_typer.Typing_error -> 
+      eprintf "Erreur de typage@.";
+      exit 1
