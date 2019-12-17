@@ -90,4 +90,4 @@ let () =
       exit 1
     | Go_typer.Unfinished -> eprintf "unfinished"; exit 1
     | Go_typer.Texprweird -> eprintf "Texpr weird"; exit 1
-    | _ -> eprintf "Error"; exit 1
+    | _ -> eprintf "Error:weird"; exit 1

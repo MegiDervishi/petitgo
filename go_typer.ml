@@ -58,6 +58,11 @@ let typlist_to_gotype tg = match tg with
   | [x] -> Tsimpl x
   | _ as l -> Tmany l
 
+(* Converts gotype to typ list *)
+let gotype_to_typlist gt = match gt with 
+  | Tsimpl x -> [x]
+  | Tmany l -> l
+
 (* Converts parser type to typer type: type_go -> gotype *)
 let typego_to_gotype env tg = typlist_to_gotype (typego_to_typlist env tg)
 
@@ -94,10 +99,14 @@ let rec check_underscore lexp =
   | ((Eident "_"), pos) :: l -> raise_error "underscore return" pos
   | (_,_):: l -> check_underscore l 
 
-let rec compare t1 t2 pos = match t1, t2 with 
+(*let rec compare t1 t2 pos = match t1, t2 with 
   |  Tsimpl a, Tsimpl b when a = b -> true
   |  Tmany (a :: x), Tmany (b :: y) when a = b ->  compare (Tmany x) (Tmany y) pos
-  | _,_ -> raise_error "not the same type" pos
+  | _,_ -> raise_error "not the same type" pos*)
+
+let rec compare lt t = match lt with 
+  | [] -> true
+  | a :: l -> if a = t then compare l t else false
 
 let rec help_unwrap = function 
     |[] -> [],[],[]
@@ -212,16 +221,17 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let env , tree2, rb2, pb2 = type_instruction env trets b2 in
       let env , tree3, rb3, pb3 = type_instruction env trets block in
       match typ with 
-      | Tsimpl _ | Tmany _ -> raise_error "Expected bool " pos_instr
       | Tsimpl Tbool -> env, (Iif(instr_if, pos_if),pos_instr)::tree3 , rb1 && rb2, pb1 || pb2 
+      | Tmany _ | Tsimpl _ -> raise_error "Expected bool bla" pos_instr
+     
   end
   | (Ifor (e_pos, b_pos), pos_instr)::block -> begin 
       let typ, expr, pos_expr, left = type_expr env e_pos in
       let env1, tree1, rb1, pb1 = type_instruction env trets (fst b_pos) in
       let env2, tree2, rb2, pb2 = type_instruction env trets block in 
       match typ with 
-      | Tsimpl _ | Tmany _ -> raise_error "Expected bool " (snd(e_pos))
       | Tsimpl Tbool -> env, (Ifor (e_pos, b_pos),pos_instr)::tree2, rb1, pb1 
+      | Tsimpl _ | Tmany _ -> raise_error "Expected bool " (snd(e_pos)) 
   end 
   | (Ireturn (le_pos), pos_instr):: block -> begin
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
@@ -230,20 +240,50 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let env , tree, rb, pb = type_instruction env trets block in
       env, (Ireturn(exprs),pos_instr)::tree , true, pb end
     else raise_error "Not the same types" pos_instr
-  end (*
+  end 
   | (Ivar ( lid, tygo_pos, le_pos), pos_instr)::block -> 
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
-    let newvars = List.fold_left (fun s (((ids, t), pos)) ->
-          let tau = typego_to_typ env t in 
-          List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty env.vars in
-    let newenv = { env with vars = newvars} in 
-    let env , tree, rb, pb = type_instruction newenv trets block in
-  *)
-  | (Iinstrsimpl((Isexpr  e_pos), pos_isexpr),pos_instr)::block -> assert false
-  | (Iinstrsimpl((Isassign_incdec (e1_pos, e2_pos)), pos_asgn),pos_instr)::block -> assert false
-  | (Iinstrsimpl((Isassign_list (le1_pos, le2_pos)), pos_lasgn),pos_instr)::block -> assert false
-  | (Iinstrsimpl((Isref (lid, le_pos)), pos_ref),pos_instr)::block -> assert false
-  | _ -> raise (Unfinished)
+    let typlist_types = gotype_to_typlist (gotypelist_to_gotype types [] pos_instr) in 
+    let ty = typego_to_typ env tygo_pos in 
+    if not(compare typlist_types ty) then raise_error "Not the same types (Ivar)" pos_instr
+    else begin
+    let newvars = List.fold_left( fun m id -> Smap.add id ty m ) env.vars lid in 
+    let newenv = {env with vars = newvars} in 
+    let env, tree, rb, pb = type_instruction newenv trets block in
+    env, (Ivar (lid, tygo_pos, exprs), pos_instr)::tree, rb, pb end 
+  | (Iinstrsimpl((Isexpr( Eprint(le_pos), pos_print)), pos_isexpr) , pos_instr)::block -> 
+    let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
+    let env, tree, rb, pb = type_instruction env trets block in 
+    env, (Iinstrsimpl((Isexpr( Eprint(exprs), pos_print)), pos_isexpr) , pos_instr)::tree, rb, true
+  | (Iinstrsimpl((Isexpr  e_pos), pos_isexpr),pos_instr)::block -> 
+    let typ, expr, expr_pos, _  = type_expr env e_pos in 
+    let env, tree, rb, pb = type_instruction env trets block in 
+    env, (Iinstrsimpl((Isexpr (expr,expr_pos)), pos_isexpr),pos_instr)::tree, rb, pb
+  | (Iinstrsimpl((Isassign_incdec (e1_pos, e2_pos)), pos_asgn),pos_instr)::block -> 
+    let typ1, expr1, expr_pos1, _  = type_expr env e1_pos in 
+    let typ2, expr2, expr_pos2, _  = type_expr env e2_pos in 
+    let env, tree, rb, pb = type_instruction env trets block in
+    if typ1 <> Tsimpl Tint then raise_error "Expected int for incr or decr" pos_instr
+    else begin 
+      let e1 , e2 = (expr1, expr_pos1),( expr2, expr_pos2)in  
+      env, (Iinstrsimpl((Isassign_incdec (e1,e2)), pos_asgn),pos_instr)::tree, rb, pb 
+    end 
+  | (Iinstrsimpl((Isassign_list (le1_pos, le2_pos)), pos_lasgn),pos_instr)::block -> 
+    let types1, exprs1, _  = help_unwrap (List.map (type_expr env) le1_pos) in 
+    let types2, exprs2, _  = help_unwrap (List.map (type_expr env) le2_pos) in 
+    if (gotypelist_to_gotype types1 [] pos_lasgn) = (gotypelist_to_gotype types2 [] pos_lasgn) then 
+      begin 
+        let env, tree, rb, pb = type_instruction env trets block in 
+        env, (Iinstrsimpl((Isassign_list (exprs1, exprs2)), pos_lasgn),pos_instr)::tree, rb, pb
+      end
+    else raise_error "Not equal types for the two expressions" pos_instr
+  | (Iinstrsimpl((Isref (lid, le_pos)), pos_ref),pos_instr)::block ->
+    let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
+    let typlist = gotype_to_typlist (gotypelist_to_gotype types [] pos_ref) in 
+    let newvars = List.fold_left2( fun m id ty -> Smap.add id ty m ) env.vars lid typlist in 
+    let newenv = {env with vars = newvars} in 
+    let env, tree, rb, pb = type_instruction newenv trets block in
+    env, (Iinstrsimpl((Isref (lid, exprs)), pos_ref),pos_instr)::tree, rb, pb
 
 
 (* Add functions and check their unicity *)
@@ -303,10 +343,10 @@ let add_vars_to_struct env d = match d with
 let type_function env (f,pos) = 
   let id, vars, (trets, tpos), block_pos = f in
   let (tin, tout) = Smap.find id env.funct in
-  let newmax = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
+  let newvars = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
           let tau = typego_to_typ env t in 
           List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty vars in
-  let env, tree, rb, pb = type_instruction {env with vars = newmax} trets (fst(block_pos)) in 
+  let env, tree, rb, pb = type_instruction {env with vars = newvars} trets (fst(block_pos)) in 
   (* check cases of trets and return bool *)
   match tout, rb with 
   | (Tmany []), true -> raise_error "No return expected" tpos

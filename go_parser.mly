@@ -12,6 +12,7 @@
     | [] -> []
     | _ -> raise Error
 
+
 %}
 
 /* Declare tokens */
