@@ -2,7 +2,7 @@
 
 open Format
 open Lexing
-open Go_error
+
 
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
@@ -24,6 +24,17 @@ let options =
 let usage = "usage: go [option] file.logo"
 
 (* localise une erreur en indiquant la ligne et la colonne *)
+let localisation_lex pos = 
+  let l = pos.pos_lnum in
+  let c = pos.pos_cnum - pos.pos_bol + 1 in
+  eprintf "File \"%s\", line %d, characters %d-%d:@." !ifile l (c-1) c
+
+let localisation_typer pos =
+  let st,e = pos in 
+  let l = st.pos_lnum in 
+  let start = st.pos_cnum - st.pos_bol + 1 in
+  let ends = e.pos_cnum - e.pos_bol +1 in 
+      eprintf "File \"%s\", line %d, characters %d-%d:@." !ifile l start ends
 
 let () =
   (* Parsing de la ligne de commande *)
@@ -63,14 +74,20 @@ let () =
   )
     with
     | Go_lexer.Lexing_error c ->
-      localisation ifile (Lexing.lexeme_start_p buf);
+      localisation_lex (Lexing.lexeme_start_p buf);
       eprintf "Erreur lexicale: %s@." c;
       exit 1
     | Go_parser.Error ->
-      localisation ifile (Lexing.lexeme_start_p buf);
+      localisation_lex (Lexing.lexeme_start_p buf);
       eprintf "Erreur syntaxique@.";
       exit 1
-    | Go_typer.Typing_error -> 
-      localisation ifile (Lexing.lexeme_start_p buf);
-      eprintf "Erreur de typage@.";
+    | Go_typer.Typing_error (msg, pos) -> 
+      localisation_typer pos;
+      eprintf "Erreur de typage: %s.@." msg;
       exit 1
+    | Go_typer.The_end -> 
+      eprintf "the end"; 
+      exit 1
+    | Go_typer.Unfinished -> eprintf "unfinished"; exit 1
+    | Go_typer.Texprweird -> eprintf "Texpr weird"; exit 1
+    | _ -> eprintf "Error"; exit 1

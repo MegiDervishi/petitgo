@@ -1,33 +1,16 @@
 open Go_ast
 open Format
+open Lexing
 
-exception Typing_error
+exception Typing_error of string * (position * position)
+exception The_end
+exception Unfinished
+exception Texprweird
 
 
 module Smap = Map.Make(String)
 
-(*Type types*)
-type typ = 
-    | Tint
-    | Tbool
-    | Tstring
-    | Tstruct of string
-    | Tstar of typ
-    | Tnone
-    | Tvoid
-
-type gotype = 
-    | Tsimpl of typ 
-    | Tmany of typ list 
-
-(* Error msgs *)
-type ems =  | Notfound_ident of string  | Notfound_struct of string | Notfound_funct of string
-            | Expectedboolgot of gotype | Expectedintgot of gotype  | Expectedstructgot of gotype | Expectedstringgot of gotype
-            | RedundantVariable | RedundantFunctionName of string | RedundantStructName | RedundantField 
-            | Leftvalue | CantCompareNil | Wrongtype | Printing | Tsimplrequired | PointerMissing  | InvalidReturns
-            | UnequalTypes of gotype * gotype  | FunctionReturnTypesDoNotCorrespond | Invalidargument of gotype 
-
-let  raise_error emsg pos = raise Typing_error
+let  raise_error emsg pos = raise (Typing_error (emsg, pos)) 
 (* Environment *)
 type tstruct = (typ Smap.t ) Smap.t
 type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
@@ -36,42 +19,34 @@ type typenv = { structs: tstruct; funct : tfunct; vars : tvars }
 (* Variable Set *)
 module Vset = Set.Make(String)
 
-(*print function*)
-let rec p_type oc t =
-    match t with    
-        |Tint -> Printf.fprintf oc "int";
-        |Tbool -> Printf.fprintf oc "bool";
-        |Tstring -> Printf.fprintf oc "string";
-        |Tstruct s -> Printf.fprintf oc "%s" s;
-        |Tstar t -> Printf.fprintf oc "*"; p_type oc t (* "*%a" p.. *)
-        |Tnone -> Printf.fprintf oc "none"
-        |Tvoid -> Printf.fprintf oc "void"
-
-
 (* Helper conversion of types functions *)
 
 (* Compacts a list of gotype into a gotype *)
-let rec gotypelist_to_gotype gtl curList = match gtl with
+(* TODO: CHECK ERRORS HERE!! *)
+let rec gotypelist_to_gotype gtl curList pos = match gtl with
   | [] -> begin
     match curList with
     | [x] -> Tsimpl x
     | x::y::ls as c -> Tmany c
-    | _ -> raise Typing_error
+    | _ -> raise_error "weird gotype" pos 
     end
   | gt::gl -> begin match gt with 
-    | Tsimpl s -> gotypelist_to_gotype gl (curList @ [s])
-    | Tmany s -> gotypelist_to_gotype gl (curList @ s)
-    | _ -> raise Typing_error end
-  | _ -> raise Typing_error
+    | Tsimpl s -> gotypelist_to_gotype gl (curList @ [s]) pos 
+    | Tmany s -> gotypelist_to_gotype gl (curList @ s) pos 
+    | _ -> raise_error "weird gotype 2" pos end
+  | _ -> raise_error "weird gotype 3" pos 
 
 (* Converts parser type to typer type : type_go -> typ  *)
-let rec typego_to_typ env tg = let t, pos = tg in  match t with
-  | Tident "int" -> Tint
-  | Tident "string" -> Tstring
-  | Tident "bool" -> Tbool
-  | Tident s -> if Smap.mem s env.structs then Tstruct s else raise_error (Notfound_struct s) pos
-  | Tmult p -> Tstar (typego_to_typ env p)
-  | Nonetype_go -> Tnone
+let rec typego_to_typ env tg = 
+  let t, pos = tg in  
+  match t with
+    | Tident "int" -> Tint
+    | Tident "string" -> Tstring
+    | Tident "bool" -> Tbool
+    | Tident s -> if Smap.mem s env.structs then Tstruct s
+                  else raise_error "Notfound_struct1" pos
+    | Tmult p -> Tstar (typego_to_typ env p)
+    | Nonetype_go -> Tnone
 
 (* Converts type_go -> typ list *)
 let rec typego_to_typlist env tg = match tg with 
@@ -110,18 +85,19 @@ let rec check_duplicate (mylist : ident loc list) = match mylist with
   | [] -> false
   | (id, pos) :: l -> 
   if List.exists (fun (y,_) -> id = y) l
-  then raise_error RedundantVariable pos
+  then raise_error "RedundantVariable" pos
   else check_duplicate l
 
-let check_return_no_underscore exp =
-  match exp with
-  | Eident "_" -> true
-  | _ -> false
+let rec check_underscore lexp =
+  match lexp with 
+  | [] -> false
+  | ((Eident "_"), pos) :: l -> raise_error "underscore return" pos
+  | (_,_):: l -> check_underscore l 
 
 let rec compare t1 t2 pos = match t1, t2 with 
   |  Tsimpl a, Tsimpl b when a = b -> true
   |  Tmany (a :: x), Tmany (b :: y) when a = b ->  compare (Tmany x) (Tmany y) pos
-  | _,_ -> raise Typing_error
+  | _,_ -> raise_error "not the same type" pos
 
 let rec help_unwrap = function 
     |[] -> [],[],[]
@@ -143,30 +119,30 @@ let rec type_expr env le_pos =
       |Eident name when name <> "_"-> begin 
           try let ts = Smap.find name env.vars in 
               (Tsimpl ts, Eident name, pos, true)
-          with Not_found -> raise_error (Notfound_ident name) pos
+          with Not_found -> raise_error "Notfound_ident" pos
       end
       |Eident "_" -> (Tsimpl Tvoid, Eident "_", pos, false)
-      | Eident _ -> assert false
+      |Eident _ -> assert false
       |Eunop (unop, te) -> begin 
         let t,e,p,b1 = type_expr env te in
         match unop with 
           | Not -> begin
-            if t <> Tsimpl Tbool then raise_error (Expectedboolgot  t) pos
+            if t <> Tsimpl Tbool then raise_error "Expectedboolgot" pos
             else (Tsimpl Tbool, Eunop(Not, (e,p)), pos, false) end
           | Sign -> begin 
-            if t <> Tsimpl Tint then raise_error (Expectedintgot  t) pos
+            if t <> Tsimpl Tint then raise_error "Expectedintgot" pos
             else (Tsimpl Tint, Eunop(Sign, (e,p)), pos, false) end
           | Address -> begin match (t,e,p,b1) with
               | (Tsimpl ta, expr, _, true) -> (Tsimpl (Tstar ta), Eunop(Address, (e,p)), pos, false)
-              | (Tsimpl ta, _,_,_) ->raise_error Leftvalue pos 
-              | (Tmany _,_,_,_) -> raise_error Tsimplrequired pos
+              | (Tsimpl ta, _,_,_) ->raise_error "Leftvalue" pos 
+              | (Tmany _,_,_,_) -> raise_error "Tsimplrequired" pos
             end 
           | Pointer -> begin
-            if t = Tsimpl Tnone then raise_error PointerMissing pos
-            else if b1 = true then raise_error Leftvalue pos 
+            if t = Tsimpl Tnone then raise_error "PointerMissing" pos
+            else if b1 = true then raise_error "Leftvalue" pos 
             else begin match t with
                  | Tsimpl Tstar ta -> (Tsimpl ta , Eunop(Pointer, (e,p)), pos, true)
-                 | _ as c -> raise_error (Invalidargument c) pos end 
+                 | _ as c -> raise_error "Invalidargument" pos end 
             end
         end
       |Ebinop(binop, e1, e2) -> begin
@@ -175,22 +151,22 @@ let rec type_expr env le_pos =
         match binop with
           | And | Or -> begin match t1, t2 with 
             | Tsimpl Tbool, Tsimpl Tbool -> Tsimpl Tbool, Ebinop(binop, (exp1,p1), (exp2,p2)),pos,false
-            | _, Tsimpl Tbool -> raise_error (Expectedboolgot t1) p1
-            | _, _ -> raise_error (Expectedboolgot t2) p2 end
+            | _, Tsimpl Tbool -> raise_error "Expectedboolgot" p1
+            | _, _ -> raise_error "Expectedboolgot" p2 end
           | Add| Minus| Mult| Div|Mod -> begin match t1, t2 with 
             | Tsimpl Tint, Tsimpl Tint -> Tsimpl Tint, Ebinop(binop, (exp1,p1), (exp2,p2)),pos,false
-            | _, Tsimpl Tint -> raise_error (Expectedintgot t1) p1
-            | _, _ -> raise_error (Expectedintgot t2) p2 end
+            | _, Tsimpl Tint -> raise_error "Expectedintgot" p1
+            | _, _ -> raise_error "Expectedintgot" p2 end
           | Lt | Leq |Gt|Geq -> begin match t1, t2 with 
             | Tsimpl Tint, Tsimpl Tint -> Tsimpl Tbool, Ebinop(binop, (exp1,p1), (exp2,p2)),pos, false
-            | _, Tsimpl Tint -> raise_error (Expectedintgot t1) p1
-            | _, _ -> raise_error (Expectedboolgot t2) p2 end
+            | _, Tsimpl Tint -> raise_error "Expectedintgot" p1
+            | _, _ -> raise_error "Expectedboolgot" p2 end
           | Iseq | Neq -> begin match t1, t2 with 
-            | Tsimpl (Tstar Tnone), Tsimpl (Tstar Tnone) -> raise_error CantCompareNil pos 
+            | Tsimpl (Tstar Tnone), Tsimpl (Tstar Tnone) -> raise_error "CantCompareNil" pos 
             | Tsimpl (Tstar Tnone), Tsimpl (Tstar _) | Tsimpl (Tstar _), Tsimpl (Tstar Tnone)-> 
                 (Tsimpl Tbool, Ebinop(binop, (exp1,p1), (exp2,p2)),pos, false) 
             | t1, t2 when t1 = t2 -> (Tsimpl Tbool, Ebinop(binop, (exp1,p1), (exp2,p2)),pos, false) 
-            | _,_ -> raise_error (UnequalTypes (t1,t2)) pos end
+            | _,_ -> raise_error "UnequalTypes" pos end
       end 
       | Emethod(e, id) -> begin match type_expr env e with 
         | (Tsimpl (Tstruct s), expr, p, left) 
@@ -199,10 +175,10 @@ let rec type_expr env le_pos =
           try let ts = Smap.find s env.structs in 
             try let tid = Smap.find id ts in 
                 (Tsimpl tid, Emethod((expr,p), id), pos, left)
-            with Not_found -> raise_error (Notfound_ident id) pos
-          with Not_found -> raise_error (Notfound_struct s) pos  
+            with Not_found -> raise_error "Notfound_ident" pos
+          with Not_found -> raise_error "Notfound_struct2" pos  
         end 
-        | (t,_,_,_) -> raise_error (Expectedstructgot t) pos
+        | (t,_,_,_) -> raise_error "Expectedstructgot t" pos
       end 
       | Eprint le -> begin 
             let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
@@ -211,33 +187,70 @@ let rec type_expr env le_pos =
       | Ecall (id, le) ->  try begin
             let tinputs, tout = Smap.find id env.funct in
             let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
-            match tinputs, gotypelist_to_gotype types [] with
+            match tinputs, gotypelist_to_gotype types [] pos with
             | t1, t2 when t1 = t2 -> (tout, Ecall (id, exprs), pos, false)
-            | _ as c1, c2 -> raise_error (Invalidargument c1) pos
+            | _ as c1, c2 -> raise_error "Invalidargument" pos
           end
-          with Not_found -> raise_error (Notfound_funct id) pos 
-      | _ -> assert false
+          with Not_found -> raise_error "Notfound_funct" pos 
+      | _ -> raise (Texprweird)
 
 (* Type Instructions: 'a -> 'b -> 'c -> 'a * 'd * bool * bool   *)
 (* returns (env, tree, ret_bool, print_bool) 
   where if there is a return ret_bool = true and if there is a print print_bool =true *)
-and type_instruction env trets = function 
-  | Iblock (b, pos_b) -> 
-    let env, tree, rb, pb =
-    List.fold_left (fun (env, tree, rb, pb) (v, pos) -> 
-      let ev, tr, retb, prb = type_instruction env trets v in
-      ev, (tr, pos) :: tree, rb && retb, prb || pb) 
-      (env, [], true, false) b 
-    in  
-    env, Iblock (List.rev tree, pos_b), rb, pb
-  | _ -> assert false
+
+
+and type_instruction env trets = function (* Error: the tree :/ *)
+  | [] -> env, [], false, false
+  | (Iblock(b, pos_b), pos_instr) :: block -> 
+      let env, tree1, rb1, pb1 = type_instruction env trets b in
+      let env, tree2, rb2, pb2 = type_instruction env trets block in
+      env,(Iblock(tree2, pos_b), pos_instr) :: tree1, rb1 && rb2, pb1 || pb2
+  | (Iif (instr_if, pos_if), pos_instr) :: block -> begin
+      let e_pos, (b1, pos_b1), (b2, pos_b2) = instr_if in 
+      let typ, expr, pos_expr, left = type_expr env e_pos in 
+      let env , tree1, rb1, pb1 = type_instruction env trets b1 in
+      let env , tree2, rb2, pb2 = type_instruction env trets b2 in
+      let env , tree3, rb3, pb3 = type_instruction env trets block in
+      match typ with 
+      | Tsimpl _ | Tmany _ -> raise_error "Expected bool " pos_instr
+      | Tsimpl Tbool -> env, (Iif(instr_if, pos_if),pos_instr)::tree3 , rb1 && rb2, pb1 || pb2 
+  end
+  | (Ifor (e_pos, b_pos), pos_instr)::block -> begin 
+      let typ, expr, pos_expr, left = type_expr env e_pos in
+      let env1, tree1, rb1, pb1 = type_instruction env trets (fst b_pos) in
+      let env2, tree2, rb2, pb2 = type_instruction env trets block in 
+      match typ with 
+      | Tsimpl _ | Tmany _ -> raise_error "Expected bool " (snd(e_pos))
+      | Tsimpl Tbool -> env, (Ifor (e_pos, b_pos),pos_instr)::tree2, rb1, pb1 
+  end 
+  | (Ireturn (le_pos), pos_instr):: block -> begin
+    let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
+    let foo = check_underscore exprs in 
+    if (gotypelist_to_gotype types [] pos_instr) = (typeret_to_gotype env trets) then begin
+      let env , tree, rb, pb = type_instruction env trets block in
+      env, (Ireturn(exprs),pos_instr)::tree , true, pb end
+    else raise_error "Not the same types" pos_instr
+  end (*
+  | (Ivar ( lid, tygo_pos, le_pos), pos_instr)::block -> 
+    let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
+    let newvars = List.fold_left (fun s (((ids, t), pos)) ->
+          let tau = typego_to_typ env t in 
+          List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty env.vars in
+    let newenv = { env with vars = newvars} in 
+    let env , tree, rb, pb = type_instruction newenv trets block in
+  *)
+  | (Iinstrsimpl((Isexpr  e_pos), pos_isexpr),pos_instr)::block -> assert false
+  | (Iinstrsimpl((Isassign_incdec (e1_pos, e2_pos)), pos_asgn),pos_instr)::block -> assert false
+  | (Iinstrsimpl((Isassign_list (le1_pos, le2_pos)), pos_lasgn),pos_instr)::block -> assert false
+  | (Iinstrsimpl((Isref (lid, le_pos)), pos_ref),pos_instr)::block -> assert false
+  | _ -> raise (Unfinished)
 
 
 (* Add functions and check their unicity *)
 let add_function_to_env env d = match d with
   | Dstruct _ -> env
   | Dfunc ((id, vars, (trets, tpos), b),pos) ->
-    if Smap.mem id env.funct then raise_error (RedundantFunctionName id) pos
+    if Smap.mem id env.funct then raise_error "RedundantFunctionName" pos
     else 
     begin
       let ids_gtpos = List.fold_left (fun vs var -> 
@@ -251,53 +264,73 @@ let add_function_to_env env d = match d with
         {structs = env.structs; funct = Smap.add id (arg_types, ret_types) env.funct; vars = env.vars}
       end
       else
-        raise Typing_error      
+        raise_error "huh?" pos    
     end
+
+let rec check_duplicate (mylist : ident loc list) = match mylist with
+  | [] -> false
+  | (id, pos) :: l -> 
+  if List.exists (fun (y,_) -> id = y) l
+  then raise_error "RedundantVariable" pos
+  else check_duplicate l
 
 (* Add structures and check their unicity *)
 let add_struct_to_env env d = match d with
   | Dfunc _ -> env
-  | Dstruct ((id, vars),pos) ->
-    if Smap.mem id env.structs then raise_error (RedundantStructName) pos
-    else 
-    begin
+  | Dstruct ((id, vars),pos) -> 
+    if Smap.mem id env.structs then raise_error "RedundantStructName" pos
+    else {env with structs = Smap.add id Smap.empty env.structs }
+
+let add_vars_to_struct env d = match d with
+  | Dfunc _ -> env
+  | Dstruct ((id, vars),pos) -> 
       let ids_gtpos = List.fold_left (fun vs var -> 
         let (ids, _), pos = var in 
         (List.map (fun id -> (id, pos)) ids) @ vs)
         [] vars in
       if not( check_duplicate ids_gtpos ) then 
       begin
-        let newStruct = List.fold_left (fun s (((ids, tau), pos) : Go_ast.vars loc) ->
-          let tau = typego_to_typ env tau in 
+        let newStruct = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
+          let tau = typego_to_typ env t in 
           List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty vars in
         { env with structs = Smap.add id newStruct env.structs }
       end
       else
-        raise Typing_error      
-    end
+        raise_error "buh?" pos
+
 
 (* Check if the function is well-typed  *)
-let type_function env ((id, vars, (trets, tpos), block),pos) =
+let type_function env (f,pos) = 
+  let id, vars, (trets, tpos), block_pos = f in
   let (tin, tout) = Smap.find id env.funct in
-  let newmax = List.fold_left (fun s (((ids, tau), pos) : Go_ast.vars loc) ->
-          let tau = typego_to_typ env tau in 
+  let newmax = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
+          let tau = typego_to_typ env t in 
           List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty vars in
-  let block = Iblock block in
-  type_instruction {env with vars = newmax} trets block
+  let env, tree, rb, pb = type_instruction {env with vars = newmax} trets (fst(block_pos)) in 
+  (* check cases of trets and return bool *)
+  match tout, rb with 
+  | (Tmany []), true -> raise_error "No return expected" tpos
+  | (Tmany (a::l)) , false -> raise_error "Expected return" tpos
+  | Tsimpl a , false -> raise_error "Expected return " tpos
+  | _, _ -> env , tree, rb, pb   
 
 (* Combine all functions *)
+
 let type_prog prog = 
   let env = { structs= Smap.empty; funct = Smap.empty ; vars = Smap.empty }  in
   let env = List.fold_left add_struct_to_env env prog in
+  let env = List.fold_left add_vars_to_struct env prog in 
   let env = List.fold_left add_function_to_env env prog in
-  let rec read_function is_print = function
-    | [] -> is_print,[]
-    | (Dstruct _)::l -> read_function is_print l
-    | (Dfunc f)::l -> let env, tree, rb, pb = type_function env f in
-      if not(rb) then raise Typing_error;
-      let (bb,ll) = read_function (is_print || pb) l in
-      (bb, tree::ll) 
+  (* check_recursive_struct *)
+  let rec read_function printing = function 
+    | [] -> printing, []
+    | (Dstruct s)::l -> read_function printing l 
+    | (Dfunc f)::l -> begin 
+        let env, tree_pos, rb, pb = type_function env f in
+        let printbool , newtree = read_function (printing || pb) l in
+        (printbool, tree_pos::newtree) (* error here maybe *)
+      end 
   in
-  let (is_print, functions) = read_function false prog in
-  if not is_print then raise Typing_error;
-  env, functions
+  let printbool, function_tree = read_function false prog in 
+  (* need to check for import fmt *)
+  env, function_tree

@@ -114,9 +114,9 @@ block :
 instr_simple :
   | e = loc(expr) { Isexpr e }
   | e = loc(expr); INCR 
-    { Isassign (e, (Ebinop(Add, e, (Econst (Eint64 Int64.one), ($startpos,$endpos))),($startpos,$endpos)))} 
+    { Isassign_incdec (e, (Ebinop(Add, e, (Econst (Eint64 Int64.one), ($startpos,$endpos))),($startpos,$endpos)))} 
   | e = loc(expr); DECR
-    { Isassign (e, (Ebinop(Minus, e, (Econst (Eint64 Int64.one), ($startpos,$endpos))),($startpos,$endpos)))} 
+    { Isassign_incdec (e, (Ebinop(Minus, e, (Econst (Eint64 Int64.one), ($startpos,$endpos))),($startpos,$endpos)))} 
   | le1 = separated_nonempty_list(COMMA, loc(expr)); EQUAL; le2 = separated_nonempty_list(COMMA, loc(expr))
     { Isassign_list (le1, le2) }
   | lid = separated_nonempty_list(COMMA, expr); REF; le = separated_nonempty_list(COMMA, loc(expr))

@@ -38,7 +38,7 @@ type type_retour =
 
 type instr_simple =
   | Isexpr of expr loc 
-  | Isassign of expr loc * expr loc 
+  | Isassign_incdec of expr loc * expr loc 
   | Isassign_list of expr loc list * expr loc list
   | Isref of ident list * expr loc list 
 
@@ -48,10 +48,10 @@ type instr =
   | Iblock of block loc 
   | Iif of instr_if loc 
   | Ivar of ident list * type_go loc * expr loc list 
-  | Ireturn of expr loc  list
+  | Ireturn of expr loc list
   | Ifor of expr loc * block loc 
 
-and block = instr loc list 
+and block = instr loc list
 and instr_if = expr loc * block loc * block loc 
 
 type vars = ident list * type_go loc 
@@ -65,3 +65,15 @@ type decl =
 
 type program = decl list 
 
+type typ = 
+    | Tint
+    | Tbool
+    | Tstring
+    | Tstruct of string
+    | Tstar of typ
+    | Tnone
+    | Tvoid
+
+type gotype = 
+    | Tsimpl of typ 
+    | Tmany of typ list
