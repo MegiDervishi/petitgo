@@ -15,7 +15,7 @@ let  raise_error emsg pos = raise (Typing_error (emsg, pos))
 (* Environment *)
 type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
 type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
-type tvars = typ Smap.t 
+type tvars = (typ * bool ref) Smap.t (* store name -> type of var , is_it_used_bool -> true if used else false *)
 type typenv = { structs: tstruct; funct : tfunct; vars : tvars } 
 (* Variable Set *)
 module Vset = Set.Make(String)
@@ -23,7 +23,6 @@ module Vset = Set.Make(String)
 (* Helper conversion of types functions *)
 
 (* Compacts a list of gotype into a gotype *)
-(* TODO: CHECK ERRORS HERE!! *)
 
 let rec gotypelist_to_typlist gtl curlist pos = match gtl with 
 | [] -> curlist
@@ -138,7 +137,8 @@ let rec type_expr env le_pos =
           |ENil -> (Tsimpl (Tstar Tnone), Econst (ENil), pos, false)
       end
       |Eident name when name <> "_"-> begin 
-          try let ts = Smap.find name env.vars in 
+          try let (ts,used) = Smap.find name env.vars in 
+              used := true;
               (Tsimpl ts, Eident name, pos, true)
           with Not_found -> raise_error "Notfound_ident" pos
       end
@@ -268,13 +268,13 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       (let tmptyp = List.nth typlist_types 0 in
       if not(compare typlist_types tmptyp) 
         then raise_error "Not the same types (Ivar)" pos_instr
-      else let newvars = List.fold_left( fun m id -> Smap.add id tmptyp m ) env.vars lid in 
+      else let newvars = List.fold_left( fun m id -> Smap.add id (tmptyp, ref false) m ) env.vars lid in 
           return_helper newvars)
     else
       (if not(compare typlist_types ty) 
         then raise_error "Not the same types (Ivar)" pos_instr
       else 
-        let newvars = List.fold_left( fun m id -> Smap.add id ty m ) env.vars lid in
+        let newvars = List.fold_left( fun m id -> Smap.add id (ty,ref false) m ) env.vars lid in
         return_helper newvars)
   | (Iinstrsimpl((Isexpr( Eprint(le_pos), pos_print)), pos_isexpr) , pos_instr)::block -> 
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
@@ -309,7 +309,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     if List.exists ( fun e -> fst(e) = Econst ENil) exprs then raise_error "Can't assign nil" pos_instr
     else begin check_duplicate_nopos lid pos_instr; 
     let typlist = gotype_to_typlist (gotypelist_to_gotype types pos_ref) in 
-    let newvars = List.fold_left2( fun m id ty -> Smap.add id ty m ) env.vars lid typlist in  (*check id is not redunant *)
+    let newvars = List.fold_left2( fun m id ty -> Smap.add id (ty,ref false) m ) env.vars lid typlist in  (*check id is not redunant *)
     let newenv = {env with vars = newvars} in 
     let env, tree, rb, pb = type_instruction newenv trets block in
     env,(Ivar (lid, (Nonetype_go, pos_instr), exprs), pos_instr)::tree, rb, pb end
@@ -386,10 +386,11 @@ let type_function env (f,pos) =
   let (tin, tout) = Smap.find id env.funct in
   let newvars = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
           let tau = typego_to_typ env t in 
-          List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty vars in
+          List.fold_left (fun s id -> Smap.add id (tau,ref false) s) s ids) Smap.empty vars in
   let env, tree, rb, pb = type_instruction {env with vars = newvars} trets (fst(block_pos)) in 
   (* check cases of trets and return bool *)
-  (* TODO: check unused variables ! *)
+  (* TODO: return the right position for the variables ! *)
+  Smap.iter (fun id (t, used) -> if not(!used) then raise_error "unused variable" dpos) env.vars;
   match tout, rb with 
   | (Tmany []), true -> raise_error "No return expected" tpos
   | (Tmany (a::l)) , false -> raise_error "Expected return" tpos
