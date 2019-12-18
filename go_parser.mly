@@ -54,9 +54,9 @@ sep_list_plus(sep, X):
 
 program :
   | PACKAGE; id = IDENT; SEMICOL; IMPORT; s = STRING; SEMICOL; d = decl* ; EOF
-    { if id = "main" && s = "fmt" then d else raise Error }
+    { if id = "main" && s = "fmt" then (d, true) else raise Error }
   | PACKAGE; id = IDENT; SEMICOL; d = decl*; EOF
-    { if id = "main" then d else raise Error};
+    { if id = "main" then (d, false) else raise Error};
 
 decl : 
   | s = loc(structure) { Dstruct s }

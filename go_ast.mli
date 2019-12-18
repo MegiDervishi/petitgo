@@ -63,7 +63,7 @@ type decl =
   | Dstruct of structure loc
   | Dfunc of gofunc loc
 
-type program = decl list 
+type program = decl list * bool 
 
 type typ = 
     | Tint

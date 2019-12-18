@@ -6,7 +6,9 @@ go_lexer.cmx : go_parser.cmx
 go_parser.cmo : go_ast.cmi go_parser.cmi
 go_parser.cmx : go_ast.cmi go_parser.cmi
 go_parser.cmi : go_ast.cmi
-go_typer.cmo : go_ast.cmi
-go_typer.cmx : go_ast.cmi
+go_typer.cmo : graph.cmo go_ast.cmi
+go_typer.cmx : graph.cmx go_ast.cmi
+graph.cmo :
+graph.cmx :
 main.cmo : go_typer.cmo go_parser.cmi go_lexer.cmo
 main.cmx : go_typer.cmx go_parser.cmx go_lexer.cmx

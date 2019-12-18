@@ -1,6 +1,7 @@
 open Go_ast
 open Format
 open Lexing
+open Graph
 
 exception Typing_error of string * (position * position)
 exception The_end
@@ -12,7 +13,7 @@ module Smap = Map.Make(String)
 
 let  raise_error emsg pos = raise (Typing_error (emsg, pos)) 
 (* Environment *)
-type tstruct = (typ Smap.t ) Smap.t
+type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
 type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
 type tvars = typ Smap.t 
 type typenv = { structs: tstruct; funct : tfunct; vars : tvars } 
@@ -23,18 +24,19 @@ module Vset = Set.Make(String)
 
 (* Compacts a list of gotype into a gotype *)
 (* TODO: CHECK ERRORS HERE!! *)
-let rec gotypelist_to_gotype gtl curList pos = match gtl with
-  | [] -> begin
-    match curList with
-    | [x] -> Tsimpl x
-    | x::y::ls as c -> Tmany c
-    | _ -> raise_error "weird gotype" pos 
-    end
-  | gt::gl -> begin match gt with 
-    | Tsimpl s -> gotypelist_to_gotype gl (curList @ [s]) pos 
-    | Tmany s -> gotypelist_to_gotype gl (curList @ s) pos 
-    | _ -> raise_error "weird gotype 2" pos end
-  | _ -> raise_error "weird gotype 3" pos 
+
+let rec gotypelist_to_typlist gtl curlist pos = match gtl with 
+| [] -> curlist
+| x :: l ->  match x with 
+  | Tsimpl s -> gotypelist_to_typlist l (curlist @ [s]) pos
+  | Tmany ls -> gotypelist_to_typlist l (curlist @ ls) pos
+
+let gotypelist_to_gotype gtl pos = 
+  let res = gotypelist_to_typlist gtl [] pos in
+  match res with 
+  | [] -> Tmany ([])
+  | [x] -> Tsimpl x
+  | _ as l -> Tmany l
 
 (* Converts parser type to typer type : type_go -> typ  *)
 let rec typego_to_typ env tg = 
@@ -88,10 +90,20 @@ let varlist_to_gotype env vars = typego_to_gotype env (varlist_to_typego vars)
 
 let rec check_duplicate (mylist : ident loc list) = match mylist with
   | [] -> false
-  | (id, pos) :: l -> 
+  | (id, pos) :: l when id <> "_" -> 
   if List.exists (fun (y,_) -> id = y) l
   then raise_error "RedundantVariable" pos
   else check_duplicate l
+  | (id,pos) :: l -> check_duplicate l 
+
+let rec check_duplicate_nopos mylist pos = match mylist with
+  | [] -> false
+  | id :: l when id <> "_" -> 
+  if List.exists (fun y -> id = y) l
+  then raise_error "RedundantVariable" pos
+  else check_duplicate_nopos l pos
+  | id :: l -> check_duplicate_nopos l pos
+
 
 let rec check_underscore lexp =
   match lexp with 
@@ -104,7 +116,7 @@ let rec check_underscore lexp =
   |  Tmany (a :: x), Tmany (b :: y) when a = b ->  compare (Tmany x) (Tmany y) pos
   | _,_ -> raise_error "not the same type" pos*)
 
-let rec compare lt t = match lt with 
+let rec compare lt t =  match lt with 
   | [] -> true
   | a :: l -> if a = t then compare l t else false
 
@@ -143,12 +155,13 @@ let rec type_expr env le_pos =
             else (Tsimpl Tint, Eunop(Sign, (e,p)), pos, false) end
           | Address -> begin match (t,e,p,b1) with
               | (Tsimpl ta, expr, _, true) -> (Tsimpl (Tstar ta), Eunop(Address, (e,p)), pos, false)
-              | (Tsimpl ta, _,_,_) ->raise_error "Leftvalue" pos 
+              | (Tsimpl ta, _,_,_) -> raise_error "Leftvalue" pos 
               | (Tmany _,_,_,_) -> raise_error "Tsimplrequired" pos
             end 
           | Pointer -> begin
             if t = Tsimpl Tnone then raise_error "PointerMissing" pos
             else if b1 = true then raise_error "Leftvalue" pos 
+            else if e = Econst ENil then raise_error "Cant assign Nil idiot" pos
             else begin match t with
                  | Tsimpl Tstar ta -> (Tsimpl ta , Eunop(Pointer, (e,p)), pos, true)
                  | _ as c -> raise_error "Invalidargument" pos end 
@@ -196,7 +209,7 @@ let rec type_expr env le_pos =
       | Ecall (id, le) ->  try begin
             let tinputs, tout = Smap.find id env.funct in
             let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
-            match tinputs, gotypelist_to_gotype types [] pos with
+            match tinputs, gotypelist_to_gotype types pos with
             | t1, t2 when t1 = t2 -> (tout, Ecall (id, exprs), pos, false)
             | _ as c1, c2 -> raise_error "Invalidargument" pos
           end
@@ -230,27 +243,39 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let env1, tree1, rb1, pb1 = type_instruction env trets (fst b_pos) in
       let env2, tree2, rb2, pb2 = type_instruction env trets block in 
       match typ with 
-      | Tsimpl Tbool -> env, (Ifor (e_pos, b_pos),pos_instr)::tree2, rb1, pb1 
+      | Tsimpl Tbool -> env, (Ifor (e_pos, b_pos),pos_instr)::tree2, rb1 && rb2, pb1 || pb2 
       | Tsimpl _ | Tmany _ -> raise_error "Expected bool " (snd(e_pos)) 
   end 
   | (Ireturn (le_pos), pos_instr):: block -> begin
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
     let foo = check_underscore exprs in 
-    if (gotypelist_to_gotype types [] pos_instr) = (typeret_to_gotype env trets) then begin
+    if (gotypelist_to_gotype types pos_instr) = (typeret_to_gotype env trets) then begin
       let env , tree, rb, pb = type_instruction env trets block in
       env, (Ireturn(exprs),pos_instr)::tree , true, pb end
     else raise_error "Not the same types" pos_instr
   end 
   | (Ivar ( lid, tygo_pos, le_pos), pos_instr)::block -> 
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
-    let typlist_types = gotype_to_typlist (gotypelist_to_gotype types [] pos_instr) in 
+    let typlist_types = gotype_to_typlist (gotypelist_to_gotype types pos_instr) in 
     let ty = typego_to_typ env tygo_pos in 
-    if not(compare typlist_types ty) then raise_error "Not the same types (Ivar)" pos_instr
-    else begin
-    let newvars = List.fold_left( fun m id -> Smap.add id ty m ) env.vars lid in 
-    let newenv = {env with vars = newvars} in 
-    let env, tree, rb, pb = type_instruction newenv trets block in
-    env, (Ivar (lid, tygo_pos, exprs), pos_instr)::tree, rb, pb end 
+    let return_helper newvars = 
+      let newenv = {env with vars = newvars} in 
+      let env, tree, rb, pb = type_instruction newenv trets block in
+      env, (Ivar (lid, tygo_pos, exprs), pos_instr)::tree, rb, pb 
+    in 
+    let newvars = [] in 
+    if ty = Tnone then 
+      (let tmptyp = List.nth typlist_types 0 in
+      if not(compare typlist_types tmptyp) 
+        then raise_error "Not the same types (Ivar)" pos_instr
+      else let newvars = List.fold_left( fun m id -> Smap.add id tmptyp m ) env.vars lid in 
+          return_helper newvars)
+    else
+      (if not(compare typlist_types ty) 
+        then raise_error "Not the same types (Ivar)" pos_instr
+      else 
+        let newvars = List.fold_left( fun m id -> Smap.add id ty m ) env.vars lid in
+        return_helper newvars)
   | (Iinstrsimpl((Isexpr( Eprint(le_pos), pos_print)), pos_isexpr) , pos_instr)::block -> 
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
     let env, tree, rb, pb = type_instruction env trets block in 
@@ -269,21 +294,25 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       env, (Iinstrsimpl((Isassign_incdec (e1,e2)), pos_asgn),pos_instr)::tree, rb, pb 
     end 
   | (Iinstrsimpl((Isassign_list (le1_pos, le2_pos)), pos_lasgn),pos_instr)::block -> 
-    let types1, exprs1, _  = help_unwrap (List.map (type_expr env) le1_pos) in 
-    let types2, exprs2, _  = help_unwrap (List.map (type_expr env) le2_pos) in 
-    if (gotypelist_to_gotype types1 [] pos_lasgn) = (gotypelist_to_gotype types2 [] pos_lasgn) then 
+    let types1, exprs1, b1  = help_unwrap (List.map (type_expr env) le1_pos) in 
+    let types2, exprs2, b2  = help_unwrap (List.map (type_expr env) le2_pos) in 
+    (* ADDED to fix typing/bad/leftvalue - unsure if its correct *)
+    if List.exists (fun b -> b = false) b1 then raise_error "Leftvalue" pos_instr else begin  
+    if (gotypelist_to_gotype types1 pos_lasgn) = (gotypelist_to_gotype types2 pos_lasgn) then 
       begin 
         let env, tree, rb, pb = type_instruction env trets block in 
         env, (Iinstrsimpl((Isassign_list (exprs1, exprs2)), pos_lasgn),pos_instr)::tree, rb, pb
       end
-    else raise_error "Not equal types for the two expressions" pos_instr
+    else raise_error "Not equal types for the two expressions" pos_instr end 
   | (Iinstrsimpl((Isref (lid, le_pos)), pos_ref),pos_instr)::block ->
-    let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
-    let typlist = gotype_to_typlist (gotypelist_to_gotype types [] pos_ref) in 
-    let newvars = List.fold_left2( fun m id ty -> Smap.add id ty m ) env.vars lid typlist in 
+    let types, exprs, b  = help_unwrap (List.map (type_expr env) le_pos) in 
+    if List.exists ( fun e -> fst(e) = Econst ENil) exprs then raise_error "Can't assign nil" pos_instr
+    else begin check_duplicate_nopos lid pos_instr; 
+    let typlist = gotype_to_typlist (gotypelist_to_gotype types pos_ref) in 
+    let newvars = List.fold_left2( fun m id ty -> Smap.add id ty m ) env.vars lid typlist in  (*check id is not redunant *)
     let newenv = {env with vars = newvars} in 
     let env, tree, rb, pb = type_instruction newenv trets block in
-    env, (Iinstrsimpl((Isref (lid, exprs)), pos_ref),pos_instr)::tree, rb, pb
+    env,(Ivar (lid, (Nonetype_go, pos_instr), exprs), pos_instr)::tree, rb, pb end
 
 
 (* Add functions and check their unicity *)
@@ -299,6 +328,7 @@ let add_function_to_env env d = match d with
         [] vars in
       if not( check_duplicate ids_gtpos ) then 
       begin
+        (* check if function takes these many arguments or returns *)
         let arg_types = varlist_to_gotype env vars in 
         let ret_types = typeret_to_gotype env trets in 
         {structs = env.structs; funct = Smap.add id (arg_types, ret_types) env.funct; vars = env.vars}
@@ -306,13 +336,6 @@ let add_function_to_env env d = match d with
       else
         raise_error "huh?" pos    
     end
-
-let rec check_duplicate (mylist : ident loc list) = match mylist with
-  | [] -> false
-  | (id, pos) :: l -> 
-  if List.exists (fun (y,_) -> id = y) l
-  then raise_error "RedundantVariable" pos
-  else check_duplicate l
 
 (* Add structures and check their unicity *)
 let add_struct_to_env env d = match d with
@@ -338,9 +361,27 @@ let add_vars_to_struct env d = match d with
       else
         raise_error "buh?" pos
 
+let check_recursive_struct env = 
+  let pos = (Lexing.dummy_pos , Lexing.dummy_pos) in 
+  let g = mk_graph() in 
+  Smap.iter (fun s _ -> add_node g s) env.structs;
+  Smap.iter (fun s_id map -> 
+    Smap.iter ( fun id typs -> 
+      match typs with 
+      | Tstruct st -> begin
+          try let foo = Smap.find st env.structs in 
+          add_edge g s_id st
+          with Not_found -> () end 
+      | _ -> ()
+      ) map
+    ) env.structs;
+  if has_cycle g then raise_error "Recursive struct" pos (* TODO: save positions for structs? *)
+  else ()
+
 
 (* Check if the function is well-typed  *)
 let type_function env (f,pos) = 
+  let dpos = Lexing.dummy_pos , Lexing.dummy_pos in 
   let id, vars, (trets, tpos), block_pos = f in
   let (tin, tout) = Smap.find id env.funct in
   let newvars = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
@@ -348,19 +389,34 @@ let type_function env (f,pos) =
           List.fold_left (fun s id -> Smap.add id tau s) s ids) Smap.empty vars in
   let env, tree, rb, pb = type_instruction {env with vars = newvars} trets (fst(block_pos)) in 
   (* check cases of trets and return bool *)
+  (* TODO: check unused variables ! *)
   match tout, rb with 
   | (Tmany []), true -> raise_error "No return expected" tpos
   | (Tmany (a::l)) , false -> raise_error "Expected return" tpos
   | Tsimpl a , false -> raise_error "Expected return " tpos
   | _, _ -> env , tree, rb, pb   
 
+let type_main_function env = 
+  (* always have package main otherwise parsing error *)
+  let pos = (Lexing.dummy_pos, Lexing.dummy_pos) in 
+  try match Smap.find "main" env.funct with 
+      | Tmany [], Tmany [] -> ()
+      | _,Tmany [] -> raise_error "Main can't have arguments" pos
+      | Tmany [], _ -> raise_error "Main can't have return types" pos
+      | _,_ -> raise_error "Main can't have arguments and return types" pos 
+  with Not_found -> raise_error "Missing main" pos
+
 (* Combine all functions *)
 
-let type_prog prog = 
+let type_prog program =
+  let prog, fmtpackage = program in
+  let pos = (Lexing.dummy_pos, Lexing.dummy_pos) in
   let env = { structs= Smap.empty; funct = Smap.empty ; vars = Smap.empty }  in
   let env = List.fold_left add_struct_to_env env prog in
   let env = List.fold_left add_vars_to_struct env prog in 
+  check_recursive_struct env;
   let env = List.fold_left add_function_to_env env prog in
+  type_main_function env;
   (* check_recursive_struct *)
   let rec read_function printing = function 
     | [] -> printing, []
@@ -372,5 +428,7 @@ let type_prog prog =
       end 
   in
   let printbool, function_tree = read_function false prog in 
-  (* need to check for import fmt *)
-  env, function_tree
+  match printbool, fmtpackage with 
+  | false, true -> raise_error "Unused import package" pos
+  | true, false -> raise_error "You have not imported the fmt package" pos
+  | _, _ -> env, function_tree
