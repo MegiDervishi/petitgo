@@ -1,9 +1,18 @@
 package main
-
 import "fmt"
-func foo() { var x int; fmt.Print(x); x := 1; fmt.Print(x) }
-func main() {}
 
+func main() {
+	n := 0;
+	{
+		if n == 1 {
+			fmt.Print("a");
+		}
+	}
+	if n == 0 {
+		fmt.Print("b");
+	}
+	fmt.Print("\n");
+}
 
 /*
 

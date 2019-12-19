@@ -15,7 +15,7 @@ let  raise_error emsg pos = raise (Typing_error (emsg, pos))
 (* Environment *)
 type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
 type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
-type tvars = (typ * bool ref) Smap.t (* store name -> type of var , is_it_used_bool -> true if used else false *)
+type tvars = (typ * bool ref * bool ref) Smap.t (* store name -> type of var , is_it_used_bool -> true if used else false *)
 type typenv = { structs: tstruct; funct : tfunct; vars : tvars} 
 (* Variable Set *)
 module Vset = Set.Make(String)
@@ -148,7 +148,7 @@ let rec type_expr env le_pos =
           |ENil -> (Tsimpl (Tstar Tnone), Econst (ENil), pos, false)
       end
       |Eident name when name <> "_"-> begin 
-          try let (ts,used) = Smap.find name env.vars in 
+          try let (ts,used, shadow) = Smap.find name env.vars in 
               used := true;
               (Tsimpl ts, Eident name, pos, true)
           with Not_found -> 
@@ -253,9 +253,16 @@ let rec type_expr env le_pos =
 
 and type_instruction env trets = function (* Error: the tree :/ *)
   | [] -> env, [], false, false
-  | (Iblock(b, pos_b), pos_instr) :: block -> 
-      let env, tree1, rb1, pb1 = type_instruction env trets b in
-      let env, tree2, rb2, pb2 = type_instruction env trets block in
+  | (Iblock(b, pos_b), pos_instr) :: block ->
+      let shadowed_vars = Smap.fold (fun id (a, b, c) nm -> Smap.add id (a, b, ref true) nm) env.vars Smap.empty in
+      let shadowed_env = {env with vars = shadowed_vars} in
+      let tmpenv, tree1, rb1, pb1 = type_instruction shadowed_env trets b in
+      (* updates the used bool of real env from tmpenv *)
+      let new_vars = Smap.fold (fun id (a, b, c) nm -> let (_, used_in_block, _) = Smap.find id tmpenv.vars in
+      Smap.add id (a, ref (!used_in_block || !b), c) nm) env.vars Smap.empty in
+      let new_env = {env with vars = new_vars} in
+      (* call on new_env *)
+      let env, tree2, rb2, pb2 = type_instruction new_env trets block in
       env,(Iblock(tree2, pos_b), pos_instr) :: tree1, rb1 && rb2, pb1 || pb2
   | (Iif (instr_if, pos_if), pos_instr) :: block -> begin
       let e_pos, (b1, pos_b1), (b2, pos_b2) = instr_if in 
@@ -292,8 +299,8 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     let ty = typego_to_typ env tygo_pos in 
     let return_helper lid ty = 
       let newvars = List.fold_left( fun m id -> 
-        if Smap.mem id m && id <> "_" then raise_error "Redundant variable4" pos_instr 
-        else Smap.add id (ty, ref false) m ) env.vars lid in 
+        if Smap.mem id m && id <> "_" then raise_error "Redundant variable 4" pos_instr 
+        else Smap.add id (ty, ref false, ref false) m ) env.vars lid in 
       let newenv = {env with vars = newvars} in 
       let env, tree, rb, pb = type_instruction newenv trets block in
       env, (Ivar (lid, tygo_pos, exprs), pos_instr)::tree, rb, pb 
@@ -341,7 +348,11 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     let types, exprs, lb  = help_unwrap (List.map (type_expr env) le_pos) in 
     let typlist_types = gotype_to_typlist (gotypelist_to_gotype types pos_instr) in 
     let return_helper lid ty = 
-      let newvars = List.fold_left( fun m id -> Smap.add id (ty, ref false) m ) env.vars lid in 
+      let newvars = List.fold_left( fun m id -> 
+      if Smap.mem id m && id <> "_" then let (_, _, shadow) = Smap.find id m in
+      if not(!shadow) then raise_error "Redundant variable 5" pos_instr 
+      else Smap.add id (ty, ref true, ref false) m (* Shadowing previous var *)
+      else Smap.add id (ty, ref false, ref false) m ) env.vars lid in  (* Var does not exist yet *)
       let newenv = {env with vars = newvars} in 
       let env, tree, rb, pb = type_instruction newenv trets block in
       env, (Ivar (lid, (Nonetype_go,pos_ref), exprs), pos_instr)::tree, rb, pb 
@@ -423,11 +434,11 @@ let type_function env (f,pos) =
   let (tin, tout) = Smap.find id env.funct in
   let newvars = List.fold_left (fun s (((ids, t), pos) : Go_ast.vars loc) ->
           let tau = typego_to_typ env t in 
-          List.fold_left (fun s id -> Smap.add id (tau,ref false) s) s ids) Smap.empty vars in
+          List.fold_left (fun s id -> Smap.add id (tau,ref false, ref true) s) s ids) Smap.empty vars in
   let env, tree, rb, pb = type_instruction {env with vars = newvars} trets (fst(block_pos)) in 
   (* check cases of trets and return bool *)
   (* TODO: return the right position for the variables ! *)
-  Smap.iter (fun id (t, used) -> if not(!used) && (id <> "_") then raise_error "unused variable" dpos) env.vars;
+  Smap.iter (fun id (t, used, shadow) -> if not(!used) && (id <> "_") then raise_error "unused variable" dpos) env.vars;
   match tout, rb with 
   | (Tmany []), true -> raise_error "No return expected" tpos
   | (Tmany (a::l)) , false -> raise_error "Expected return" tpos
