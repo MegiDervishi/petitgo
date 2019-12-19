@@ -128,7 +128,7 @@ let rec check_underscore lexp =
 
 let rec compare lt t =  match lt with 
   | [] -> true
-  | a :: l -> if a = t then compare l t else false
+  | a :: l -> if (a = t) || (a = Tstar Tnone) then compare l t else false
 
 let rec help_unwrap = function 
     |[] -> [],[],[]
@@ -296,16 +296,16 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let newenv = {env with vars = newvars} in 
       let env, tree, rb, pb = type_instruction newenv trets block in
       env, (Ivar (lid, tygo_pos, exprs), pos_instr)::tree, rb, pb 
-    in 
-    if ty = Tnone then 
-      (let tmptyp = List.nth typlist_types 0 in
-      if not(compare typlist_types tmptyp) 
+    in begin
+    match ty with 
+      | Tnone -> (let tmptyp = List.hd typlist_types in
+        if not(compare typlist_types tmptyp) 
         then raise_error "Not the same types (Ivar)" pos_instr
       else return_helper lid tmptyp)
-    else
-      (if not(compare typlist_types ty) 
-        then raise_error "Not the same types (Ivar)" pos_instr
-      else return_helper lid ty)
+      | _ -> ( if not(compare typlist_types ty) 
+            then raise_error "Not the same types (Ivar)" pos_instr
+            else return_helper lid ty)
+      end
   | (Inil, pos_instr)::block -> type_instruction env trets block 
   | (Iinstrsimpl((Isexpr( Eprint(le_pos), pos_print)), pos_isexpr) , pos_instr)::block -> 
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
