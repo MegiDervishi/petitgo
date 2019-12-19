@@ -114,22 +114,23 @@ let rec check_duplicate_nopos mylist pos = match mylist with
   else check_duplicate_nopos l pos
   | id :: l -> check_duplicate_nopos l pos
 
-
 let rec check_underscore lexp =
   match lexp with 
   | [] -> ()
   | ((Eident "_"), pos) :: l -> raise_error "underscore return" pos
   | (_,_):: l -> check_underscore l 
 
-let rec compare_gotypes exprtypes inputs pos = match exprtypes, inputs with
-  |  Tsimpl (Tstar Tnone), Tsimpl (Tstar _ )-> true
-  |  Tsimpl a, Tsimpl b when a = b -> true
-  |  Tmany([]), Tmany(a::x) -> raise_error "function takes more arguments" pos
-  |  Tmany(a::x), Tmany([]) -> raise_error "function takes less arguments" pos
-  |  Tmany( []), Tmany([]) -> true 
-  |  Tmany ((Tstar Tnone) :: x), Tmany ((Tstar s) :: y) -> compare_gotypes (Tmany x) (Tmany y) pos
-  |  Tmany (a :: x), Tmany (b :: y) when (a = b) -> compare_gotypes (Tmany x) (Tmany y) pos
-  |  _,_ -> false
+let rec compare_gotypes exprtypes inputstypes givenexpr pos = match exprtypes, inputstypes, givenexpr with
+  |  Tsimpl (Tstar Tnone), Tsimpl (Tstar _ ), [] -> true
+  |  Tsimpl (Tstar Tnone), Tsimpl (Tstar _ ), [(Econst ENil, _)] -> true
+  |  Tsimpl a, Tsimpl b, _ when a = b -> true
+  |  Tmany([]), Tmany(a::x), _ -> raise_error "function takes more arguments" pos
+  |  Tmany(a::x), Tmany([]), _ -> raise_error "function takes less arguments" pos
+  |  Tmany( []), Tmany([]), _ -> true 
+  |  Tmany ((Tstar Tnone) :: x), Tmany ((Tstar s) :: y), e::l when fst e = Econst ENil -> compare_gotypes (Tmany x) (Tmany y) l pos
+  |  Tmany (a :: x), Tmany (b :: y), e::l when (a = b) -> compare_gotypes (Tmany x) (Tmany y) l pos
+  |  Tmany (a :: x), Tmany (b :: y), [] when (a = b) -> compare_gotypes (Tmany x) (Tmany y) [] pos
+  |  _,_,_ -> false
 
 (* TODO: change name compare_typlist_with_typ *)
 let rec compare lt t =  match lt with 
@@ -242,7 +243,7 @@ let rec type_expr env le_pos =
           try begin
               let tinputs, tout = Smap.find id env.funct in
               let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
-              if not(compare_gotypes (gotypelist_to_gotype types pos) tinputs pos) then 
+              if not(compare_gotypes (gotypelist_to_gotype types pos) tinputs exprs pos) then 
               raise_error "Not the same types" pos
               else (tout, Ecall (id, exprs), pos, false) end 
             with Not_found -> raise_error "Notfound_funct" pos end 
@@ -293,7 +294,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
     check_underscore exprs;
     (* return empty *)
-    if (gotypelist_to_gotype types pos_instr) = (typeret_to_gotype env trets) then begin
+    if compare_gotypes (gotypelist_to_gotype types pos_instr) (typeret_to_gotype env trets) exprs pos_instr then begin
       let env , tree, rb, pb = type_instruction env trets block in
       env, (Ireturn(exprs),pos_instr)::tree , true, pb end
     else raise_error "Not the same types" pos_instr
@@ -343,7 +344,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     let types2, exprs2, b2  = help_unwrap (List.map (type_expr env) le2_pos) in 
     (* TODO: ADDED to fix typing/bad/leftvalue - unsure if its correct *)
     if List.exists (fun b -> b = false) b1 then raise_error "Leftvalue 1" pos_instr else begin  
-    if (gotypelist_to_gotype types1 pos_lasgn) = (gotypelist_to_gotype types2 pos_lasgn) then 
+    if compare_gotypes (gotypelist_to_gotype types2 pos_lasgn) (gotypelist_to_gotype types1 pos_lasgn) exprs2 pos_instr then 
       begin 
         let env, tree, rb, pb = type_instruction env trets block in 
         env, (Iinstrsimpl((Isassign_list (exprs1, exprs2)), pos_lasgn),pos_instr)::tree, rb, pb
