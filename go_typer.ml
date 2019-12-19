@@ -121,11 +121,17 @@ let rec check_underscore lexp =
   | ((Eident "_"), pos) :: l -> raise_error "underscore return" pos
   | (_,_):: l -> check_underscore l 
 
-(*let rec compare t1 t2 pos = match t1, t2 with 
+let rec compare_gotypes exprtypes inputs pos = match exprtypes, inputs with
+  |  Tsimpl (Tstar Tnone), Tsimpl (Tstar _ )-> true
   |  Tsimpl a, Tsimpl b when a = b -> true
-  |  Tmany (a :: x), Tmany (b :: y) when a = b ->  compare (Tmany x) (Tmany y) pos
-  | _,_ -> raise_error "not the same type" pos*)
+  |  Tmany([]), Tmany(a::x) -> raise_error "function takes more arguments" pos
+  |  Tmany(a::x), Tmany([]) -> raise_error "function takes less arguments" pos
+  |  Tmany( []), Tmany([]) -> true 
+  |  Tmany ((Tstar Tnone) :: x), Tmany ((Tstar s) :: y) -> compare_gotypes (Tmany x) (Tmany y) pos
+  |  Tmany (a :: x), Tmany (b :: y) when (a = b) -> compare_gotypes (Tmany x) (Tmany y) pos
+  |  _,_ -> false
 
+(* TODO: change name compare_typlist_with_typ *)
 let rec compare lt t =  match lt with 
   | [] -> true
   | a :: l -> if (a = t) || (a = Tstar Tnone) then compare l t else false
@@ -228,7 +234,7 @@ let rec type_expr env le_pos =
             match fst e with 
             | Eident s -> if Smap.mem s env.structs 
             then let t, exp, p, b = type_expr env e in
-              (t , Eunop(Pointer, (exp,p)), pos, false) (* BOOL should be false! *)
+              (Tsimpl (Tstar (Tstruct s)) , Eunop(Pointer, (exp,p)), pos, false) (* BOOL should be false! *)
             else raise_error "struck unknown name" pos
             | _ -> raise_error "new() takes as argument a struct type only" pos 
             end
@@ -236,9 +242,9 @@ let rec type_expr env le_pos =
           try begin
               let tinputs, tout = Smap.find id env.funct in
               let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
-              match tinputs, gotypelist_to_gotype types pos with
-              | t1, t2 when t1 = t2 -> (tout, Ecall (id, exprs), pos, false)
-              | _ -> raise_error "Invalidargument 2" pos end
+              if not(compare_gotypes (gotypelist_to_gotype types pos) tinputs pos) then 
+              raise_error "Not the same types" pos
+              else (tout, Ecall (id, exprs), pos, false) end 
             with Not_found -> raise_error "Notfound_funct" pos end 
 
 (* Type Instructions: 'a -> 'b -> 'c -> 'a * 'd * bool * bool   *)
