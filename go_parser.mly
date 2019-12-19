@@ -11,8 +11,6 @@
     | (Eident i) :: x -> i :: (makeexpr_to_ident x)
     | [] -> []
     | _ -> raise Error
-
-
 %}
 
 /* Declare tokens */
@@ -99,9 +97,9 @@ expr :
   | LPAREN; e = expr; RPAREN    { e }
   | e = loc(expr); DOT; i = IDENT    { Emethod (e, i) }
   | id = IDENT; LPAREN; le = separated_list(COMMA, loc(expr)); RPAREN 
-    { Ecall (id, le) }
+    { if id = "new" then Enew le else Ecall (id, le) }
   | f = expr; DOT; p = IDENT; LPAREN; le = separated_list(COMMA, loc(expr)); RPAREN 
-    { if f = Eident "fmt" && p="Print" then Eprint le else raise Error }
+    { if f = Eident "fmt" && p = "Print" then Eprint le else raise Error }
   | MINUS; e = loc(expr)   %prec sign          
     { Ebinop (Minus, (Econst (Eint64 Int64.zero) , ($startpos,$endpos)), e)  } 
   | MULT; e = loc(expr)              { Eunop (Pointer, e)   } %prec pointer

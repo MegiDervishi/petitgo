@@ -22,9 +22,11 @@ type expr =
   | Eident of ident 
   | Emethod of expr loc * ident
   | Eprint of expr loc list 
+  | Enew of expr loc list
   | Ecall of ident * expr loc list 
   | Eunop of unop * expr loc 
   | Ebinop of binop * expr loc * expr loc 
+
 
 type type_go =
   | Tident of ident 
