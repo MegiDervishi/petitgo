@@ -326,6 +326,12 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
     let env, tree, rb, pb = type_instruction env trets block in 
     env, (Iinstrsimpl((Isexpr( Eprint(exprs), pos_print)), pos_isexpr) , pos_instr)::tree, rb, true
+  | (Iinstrsimpl((Isexpr (Ecall(id, le),pos)), pos_isexpr),pos_instr)::block -> 
+    let typ, expr, expr_pos, _  = type_expr env (Ecall(id, le),pos) in
+    let (_, tout) = Smap.find id env.funct in
+    let is_func_returning = (List.length (gotype_to_typlist tout) > 0) in
+    let env, tree, rb, pb = type_instruction env trets block in 
+    env, (Iinstrsimpl((Isexpr (expr,expr_pos)), pos_isexpr),pos_instr)::tree, is_func_returning || rb, pb
   | (Iinstrsimpl((Isexpr  e_pos), pos_isexpr),pos_instr)::block -> 
     let typ, expr, expr_pos, _  = type_expr env e_pos in 
     let env, tree, rb, pb = type_instruction env trets block in 
@@ -450,7 +456,7 @@ let type_function env (f,pos) =
   | (Tmany []), true -> raise_error "No return expected" tpos
   | (Tmany (a::l)) , false -> raise_error "Expected return" tpos
   | Tsimpl a , false -> raise_error "Expected return " tpos
-  | _, _ -> env , tree, rb, pb   
+  | _, _ -> env , tree, rb, pb 
 
 let type_main_function env = 
   (* always have package main otherwise parsing error *)
