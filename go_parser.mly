@@ -33,7 +33,7 @@
 %left AND
 %left ISEQ NEQ GT GEQ LT LEQ
 %left ADD MINUS
-%left MUL DIV MOD
+%left MULT DIV MOD
 %nonassoc sign pointer ADDRESS NOT
 %left DOT
 

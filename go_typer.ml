@@ -337,7 +337,19 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       end
     else raise_error "Not equal types for the two expressions" pos_instr end 
   | (Iinstrsimpl((Isref (lid, le_pos)), pos_ref),pos_instr)::block ->
-    type_instruction env trets ((Ivar (lid, (Nonetype_go,pos_instr), le_pos), pos_instr)::block)
+    check_duplicate_nopos lid pos_instr;
+    let types, exprs, lb  = help_unwrap (List.map (type_expr env) le_pos) in 
+    let typlist_types = gotype_to_typlist (gotypelist_to_gotype types pos_instr) in 
+    let return_helper lid ty = 
+      let newvars = List.fold_left( fun m id -> Smap.add id (ty, ref false) m ) env.vars lid in 
+      let newenv = {env with vars = newvars} in 
+      let env, tree, rb, pb = type_instruction newenv trets block in
+      env, (Ivar (lid, (Nonetype_go,pos_ref), exprs), pos_instr)::tree, rb, pb 
+    in
+    let tmptyp = List.hd typlist_types in
+    if not(compare typlist_types tmptyp) then raise_error "Not the same types (Ivar)" pos_instr
+    else return_helper lid tmptyp
+    (*type_instruction env trets ((Ivar (lid, (Nonetype_go,pos_instr), le_pos), pos_instr)::block)*)
 
 (* Add functions and check their unicity *)
 let add_function_to_env env d = match d with
