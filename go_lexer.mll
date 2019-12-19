@@ -53,15 +53,17 @@ rule token = parse
   | "fmt"       	{ semicolon := true; IDENT "fmt"  }
   | "main"      	{ semicolon := true; IDENT "main" }
   | "Print"     	{ semicolon := true; IDENT "Print"}
+  | "."         	{ semicolon := false; DOT }
+  | "&"         	{ semicolon := false; ADDRESS }
+  | "!="        	{ semicolon := false; NEQ }
+  | ":="        	{ semicolon := false; REF }
   | "&&"        	{ semicolon := false; AND }
   | "||"        	{ semicolon := false; OR }
   | "=="        	{ semicolon := false; ISEQ }
-  | "!="        	{ semicolon := false; NEQ }
   | ">"         	{ semicolon := false; GT }
   | ">="        	{ semicolon := false; GEQ }
   | "<"         	{ semicolon := false; LT }
   | "<="        	{ semicolon := false; LEQ }
-  | ":="        	{ semicolon := false; REF }
   | "="         	{ semicolon := false; EQUAL}
   | "++"        	{ semicolon := true;  INCR }
   | "--"        	{ semicolon := true;  DECR }
@@ -70,9 +72,7 @@ rule token = parse
   | "*"         	{ semicolon := false; MULT }
   | "/"         	{ semicolon := false; DIV }
   | "%"         	{ semicolon := false; MOD }
-  | "&"         	{ semicolon := false; ADDRESS }
   | "!"         	{ semicolon := false; NOT }
-  | "."         	{ semicolon := false; DOT }
   | "("         	{ semicolon := false; LPAREN }
   | ")"         	{ semicolon := true;  RPAREN }
   | "{"         	{ semicolon := false; LBRACE }

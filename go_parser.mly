@@ -17,11 +17,11 @@
 %token VAR STRUCT TYPE TRUE FALSE NIL RETURN
 %token EQUAL ISEQ NEQ REF LEQ GEQ LT GT 
 %token IF ELSE FOR FUNC IMPORT PACKAGE
-%token INCR DECR AND OR NOT ADDRESS 
+%token INCR DECR AND OR NOT ADDRESS
 %token LPAREN RPAREN LBRACE RBRACE 
 %token MULT DIV MOD ADD MINUS
 %token DOT SEMICOL COMMA
-%token EOF
+%token EOF 
 	    
 %token <string> STRING
 %token <string> IDENT
@@ -29,12 +29,13 @@
 
 
 /* Priority and associativity*/
-%nonassoc DOT 
-%nonassoc LT GT LEQ GEQ
-%left OR AND 
-%left ISEQ NEQ
-%left ADD MINUS MULT DIV MOD
-%nonassoc sign pointer ADDRESS NOT 
+%left OR
+%left AND
+%left ISEQ NEQ GT GEQ LT LEQ
+%left ADD MINUS
+%left MUL DIV MOD
+%nonassoc sign pointer ADDRESS NOT
+%left DOT
 
 %start program
 %type <Go_ast.program> program

@@ -150,13 +150,13 @@ let rec type_expr env le_pos =
       |Eident name when name <> "_"-> begin 
           try let (ts,used) = Smap.find name env.vars in 
               used := true;
-              (Tsimpl ts, Eident name, pos, false)
+              (Tsimpl ts, Eident name, pos, true)
           with Not_found -> 
             if Smap.mem name env.structs then
-              (Tsimpl(Tstruct name), Eident name, pos, false)
+              (Tsimpl(Tstruct name), Eident name, pos, true)
             else  raise_error "Notfound_ident" pos
       end
-      |Eident "_" -> (Tsimpl Tvoid, Eident "_", pos, false)
+      |Eident "_" -> (Tsimpl Tvoid, Eident "_", pos, false) (* TODO check bool*)
       |Eident _ -> raise The_end 
       |Eunop (unop, te) -> begin 
         let t,e,p,b1 = type_expr env te in
@@ -174,7 +174,7 @@ let rec type_expr env le_pos =
             end 
           | Pointer -> begin
             if t = Tsimpl Tnone then raise_error "PointerMissing" pos
-            else if b1 = true then raise_error "Leftvalue 3" pos 
+            (*else if b1 = true then raise_error "Leftvalue 3" pos *)
             else if e = Econst ENil then raise_error "Cant assign Nil idiot" pos
             else begin match t with
                  | Tsimpl Tstar ta -> (Tsimpl ta , Eunop(Pointer, (e,p)), pos, true)
@@ -214,6 +214,7 @@ let rec type_expr env le_pos =
             with Not_found -> raise_error "Notfound_ident" pos
           with Not_found -> raise_error "Notfound_struct2" pos  
         end 
+        (* TODO: Check Nil case *)
         | _ -> raise_error "Expectedstructgot 60" pos
       end 
       | Eprint le -> begin 
@@ -286,7 +287,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
   end 
   | (Ivar ( lid, tygo_pos, le_pos), pos_instr)::block -> 
     check_duplicate_nopos lid pos_instr;
-    let types, exprs, _  = help_unwrap (List.map (type_expr env) le_pos) in 
+    let types, exprs, lb  = help_unwrap (List.map (type_expr env) le_pos) in 
     let typlist_types = gotype_to_typlist (gotypelist_to_gotype types pos_instr) in 
     let ty = typego_to_typ env tygo_pos in 
     let return_helper lid ty = 
