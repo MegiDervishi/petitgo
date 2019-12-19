@@ -49,6 +49,7 @@ let rec typego_to_typ env tg =
     | Tmult p -> Tstar (typego_to_typ env p)
     | Nonetype_go -> Tnone
 
+(* TODO: name typegolist!!!! *)
 (* Converts type_go -> typ list *)
 let rec typego_to_typlist env tg = match tg with 
   | [] -> []
@@ -80,10 +81,12 @@ let varlist_to_ids vars = begin
   let x = List.split(fst (List.split vars)) in
   List.flatten (fst x)
   end
-let varlist_to_typego vars = begin
-  let x = List.split(fst (List.split vars)) in
-  snd x
-  end
+
+let varlist_to_typego vars =
+  List.rev(List.fold_left (fun l (tuple, pos) -> let lids, typ = tuple in 
+      List.fold_left (fun l2 _ -> typ :: l2) l lids
+  ) [] vars)
+
 let varlist_to_gotype env vars = typego_to_gotype env (varlist_to_typego vars)
 
 
@@ -175,7 +178,7 @@ let rec type_expr env le_pos =
             else if e = Econst ENil then raise_error "Cant assign Nil idiot" pos
             else begin match t with
                  | Tsimpl Tstar ta -> (Tsimpl ta , Eunop(Pointer, (e,p)), pos, true)
-                 | _ -> raise_error "Invalidargument" pos end 
+                 | _ -> raise_error "Invalidargument 1" pos end 
             end
         end
       |Ebinop(binop, e1, e2) -> begin
@@ -234,13 +237,18 @@ let rec type_expr env le_pos =
               let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
               match tinputs, gotypelist_to_gotype types pos with
               | t1, t2 when t1 = t2 -> (tout, Ecall (id, exprs), pos, false)
-              | _ -> raise_error "Invalidargument" pos end
+              | _ -> raise_error "Invalidargument 2" pos end
             with Not_found -> raise_error "Notfound_funct" pos end 
 
 (* Type Instructions: 'a -> 'b -> 'c -> 'a * 'd * bool * bool   *)
 (* returns (env, tree, ret_bool, print_bool) 
   where if there is a return ret_bool = true and if there is a print print_bool =true *)
 
+(*and recall_funct env le =
+    let t, expr, b  = help_unwrap (List.map (type_expr env) le) in
+        match exprs with 
+        | Ecall (id, e) -> recall_funct env e 
+        | _ -> (t, expr, b)*)
 
 and type_instruction env trets = function (* Error: the tree :/ *)
   | [] -> env, [], false, false
@@ -328,18 +336,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       end
     else raise_error "Not equal types for the two expressions" pos_instr end 
   | (Iinstrsimpl((Isref (lid, le_pos)), pos_ref),pos_instr)::block ->
-    let types, exprs, b  = help_unwrap (List.map (type_expr env) le_pos) in 
-    if List.exists ( fun e -> fst(e) = Econst ENil) exprs then raise_error "Can't assign nil" pos_instr
-    else begin check_duplicate_nopos lid pos_instr; 
-    (* TODO: check the type of lid == types *)
-    let typlist = gotype_to_typlist (gotypelist_to_gotype types pos_ref) in 
-    let newvars = List.fold_left2( fun m id ty -> 
-      if Smap.mem id m && id <> "_" then raise_error "Redundant variable 5" pos_ref else
-      Smap.add id (ty,ref false) m ) env.vars lid typlist in 
-    let newenv = {env with vars = newvars} in 
-    let env, tree, rb, pb = type_instruction newenv trets block in
-    env,(Ivar (lid, (Nonetype_go, pos_instr), exprs), pos_instr)::tree, rb, pb end
-
+    type_instruction env trets ((Ivar (lid, (Nonetype_go,pos_instr), le_pos), pos_instr)::block)
 
 (* Add functions and check their unicity *)
 let add_function_to_env env d = match d with
@@ -354,9 +351,10 @@ let add_function_to_env env d = match d with
         [] vars in
       if not( check_duplicate ids_gtpos ) then 
       begin
-        (* check if function takes these many arguments or returns *)
+        (* TODO: check if function takes these many arguments or returns *)
         let arg_types = varlist_to_gotype env vars in 
         let ret_types = typeret_to_gotype env trets in 
+
         {structs = env.structs; funct = Smap.add id (arg_types, ret_types) env.funct; vars = env.vars}
       end
       else
