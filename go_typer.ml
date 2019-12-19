@@ -263,7 +263,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let new_env = {env with vars = new_vars} in
       (* call on new_env *)
       let env, tree2, rb2, pb2 = type_instruction new_env trets block in
-      env,(Iblock(tree2, pos_b), pos_instr) :: tree1, rb1 && rb2, pb1 || pb2
+      env,(Iblock(tree2, pos_b), pos_instr) :: tree1, rb1 || rb2, pb1 || pb2
   | (Iif (instr_if, pos_if), pos_instr) :: block -> begin
       let e_pos, (b1, pos_b1), (b2, pos_b2) = instr_if in 
       let typ, expr, pos_expr, left = type_expr env e_pos in 
@@ -271,7 +271,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let env , tree2, rb2, pb2 = type_instruction env trets b2 in
       let env , tree3, rb3, pb3 = type_instruction env trets block in
       match typ with 
-      | Tsimpl Tbool -> env, (Iif(instr_if, pos_if),pos_instr)::tree3 , rb1 && rb2, pb1 || pb2 
+      | Tsimpl Tbool -> env, (Iif(instr_if, pos_if),pos_instr)::tree3 , ((rb1 && rb2) || rb3), pb1 || pb2 || pb3
       | Tmany _ | Tsimpl _ -> raise_error "Expected bool bla" pos_instr
      
   end
@@ -280,7 +280,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
       let env1, tree1, rb1, pb1 = type_instruction env trets (fst b_pos) in
       let env2, tree2, rb2, pb2 = type_instruction env trets block in 
       match typ with 
-      | Tsimpl Tbool -> env, (Ifor (e_pos, b_pos),pos_instr)::tree2, rb1 && rb2, pb1 || pb2 
+      | Tsimpl Tbool -> env, (Ifor (e_pos, b_pos),pos_instr)::tree2, rb2 , pb1 || pb2 (* TODO: check *)
       | Tsimpl _ | Tmany _ -> raise_error "Expected bool " (snd(e_pos)) 
   end 
   | (Ireturn (le_pos), pos_instr):: block -> begin
