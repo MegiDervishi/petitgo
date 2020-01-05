@@ -1,3 +1,2 @@
-EXCLUDE_QUERY_DIR
-B _build/default/.main.eobjs/byte
+B .
 S .

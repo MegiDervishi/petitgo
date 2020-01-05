@@ -21,7 +21,7 @@ let options =
    "--type-only", Arg.Set type_only,
    "  Pour faire uniquement l'analyse syntaxique et le typage"]
 
-let usage = "usage: go [option] file.logo"
+let usage = "usage: go [option] file.go"
 
 (* localise une erreur en indiquant la ligne et la colonne *)
 let localisation_lex pos = 
@@ -42,7 +42,6 @@ let () =
 
   (* On vérifie que le nom du fichier source a bien été indiqué *)
   if !ifile="" then begin eprintf "Aucun fichier à compiler\n@?"; exit 1 end;
-
   (* Ce fichier doit avoir l'extension .go *)
   if not (Filename.check_suffix !ifile ".go") then begin
     eprintf "Le fichier d'entrée doit avoir l'extension .go\n@?";
@@ -50,13 +49,17 @@ let () =
     exit 1
   end;
 
+  if !ofile = "" then 
+    ofile := (Filename.remove_extension !ifile);
+    let nfile = sprintf "%s.s" !ofile in 
+
   (* Ouverture du fichier source en lecture *)
   let f = open_in !ifile in
 
   (* Création d'un tampon d'analyse lexicale *)
   let buf = Lexing.from_channel f in
 
-  try (
+  try 
     (* Parsing: la fonction  Parser.prog transforme le tampon lexical en un
        arbre de syntaxe abstraite si aucune erreur (lexicale ou syntaxique)
        n'est détectée.
@@ -70,9 +73,8 @@ let () =
     else
         let env,functions = Go_typer.type_prog p in
         print_string "typage ok\n";
-        exit 0
-  )
-    with
+    Compiler.compile_program p nfile;
+  with
     | Go_lexer.Lexing_error c ->
       localisation_lex (Lexing.lexeme_start_p buf);
       eprintf "Erreur lexicale: %s@." c;

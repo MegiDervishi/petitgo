@@ -1,3 +1,5 @@
+compiler.cmo : x86_64.cmo go_ast.cmi
+compiler.cmx : x86_64.cmx go_ast.cmi
 go_ast.cmi :
 go_error.cmo : go_ast.cmi
 go_error.cmx : go_ast.cmi
@@ -10,5 +12,7 @@ go_typer.cmo : graph.cmo go_ast.cmi
 go_typer.cmx : graph.cmx go_ast.cmi
 graph.cmo :
 graph.cmx :
-main.cmo : go_typer.cmo go_parser.cmi go_lexer.cmo
-main.cmx : go_typer.cmx go_parser.cmx go_lexer.cmx
+main.cmo : go_typer.cmo go_parser.cmi go_lexer.cmo compiler.cmo
+main.cmx : go_typer.cmx go_parser.cmx go_lexer.cmx compiler.cmx
+x86_64.cmo :
+x86_64.cmx :

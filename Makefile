@@ -1,4 +1,4 @@
-CMO=go_lexer.cmo go_parser.cmo go_error.cmo graph.cmo go_typer.cmo main.cmo
+CMO=go_lexer.cmo go_parser.cmo go_error.cmo graph.cmo go_typer.cmo x86_64.cmo compiler.cmo main.cmo
 GENERATED = go_lexer.ml go_parser.ml go_parser.mli
 FLAGS=-annot -g -bin-annot
 
@@ -7,7 +7,7 @@ all: pgo
 
 .PHONY: tests
 tests: pgo
-	 cd tests && ./test.sh -2 ../pgo -parse
+	 cd tests && ./test.sh -3 ../pgo -parse
 
 pgo: $(CMO)
 	ocamlc $(FLAGS) -o $@ nums.cma $(CMO)
@@ -33,7 +33,7 @@ clean:
 	rm -f *.cm[io] *.cmt[io] *.o *.annot *~ pgo $(GENERATED)
 	rm -f go_parser.output go_parser.automaton
 	rm -f go_parser.conflicts go_parser.cmt main.cmt go_lexer.cmt
-	rm -f main.cmt go_error.cmt graph.cmt go_typer.cmt
+	rm -f main.cmt go_error.cmt graph.cmt go_typer.cmt compiler.cmt
 
 re: clean all
 

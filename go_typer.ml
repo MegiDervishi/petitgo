@@ -331,7 +331,7 @@ and type_instruction env trets = function (* Error: the tree :/ *)
     let (_, tout) = Smap.find id env.funct in
     let is_func_returning = (List.length (gotype_to_typlist tout) > 0) in
     let env, tree, rb, pb = type_instruction env trets block in 
-    env, (Iinstrsimpl((Isexpr (expr,expr_pos)), pos_isexpr),pos_instr)::tree, is_func_returning || rb, pb
+    env, (Iinstrsimpl((Isexpr (expr,expr_pos)), pos_isexpr),pos_instr)::tree, is_func_returning && rb, pb
   | (Iinstrsimpl((Isexpr  e_pos), pos_isexpr),pos_instr)::block -> 
     let typ, expr, expr_pos, _  = type_expr env e_pos in 
     let env, tree, rb, pb = type_instruction env trets block in 
