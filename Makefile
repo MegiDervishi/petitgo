@@ -4,6 +4,8 @@ FLAGS=-annot -g -bin-annot
 
 all: pgo
 	./pgo test.go
+	gcc -g -no-pie test.s
+	./a.out
 
 .PHONY: tests
 tests: pgo
