@@ -1,3 +1,5 @@
+open Format
+open Smap_definer
 
 type pos = Lexing.position
 type tuple = pos * pos
@@ -79,3 +81,13 @@ type typ =
 type gotype = 
     | Tsimpl of typ 
     | Tmany of typ list
+
+(* Environment *)
+type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
+type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
+type tvars = (typ * bool ref * bool ref) Smap.t (* store name -> type of var , is_it_used_bool -> true if used else false *)
+(* Name of input vars, func_block, *)
+type tfuncinfo = ((ident*typ) list * instr) Smap.t
+
+type typenv = {structs: tstruct; funct : tfunct; vars : tvars; funct_info : tfuncinfo} 
+

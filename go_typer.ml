@@ -13,10 +13,14 @@ module Smap = Map.Make(String)
 
 let  raise_error emsg pos = raise (Typing_error (emsg, pos)) 
 (* Environment *)
-type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
+(*type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
 type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
 type tvars = (typ * bool ref * bool ref) Smap.t (* store name -> type of var , is_it_used_bool -> true if used else false *)
-type typenv = { structs: tstruct; funct : tfunct; vars : tvars} 
+(* Name of input vars, func_block, *)
+type tfuncinfo = ((ident*typ) list * instr) Smap.t
+
+type typenv = {structs: tstruct; funct : tfunct; vars : tvars; funct_info : tfuncinfo} 
+*)
 (* Variable Set *)
 module Vset = Set.Make(String)
 
@@ -123,10 +127,14 @@ let rec check_underscore lexp =
 let rec compare_gotypes exprtypes inputstypes givenexpr pos = match exprtypes, inputstypes, givenexpr with
   |  Tsimpl (Tstar Tnone), Tsimpl (Tstar _ ), [] -> true
   |  Tsimpl (Tstar Tnone), Tsimpl (Tstar _ ), [(Econst ENil, _)] -> true
+  |  Tsimpl Tvoid, _, _ -> raise_error "Can't assign _" pos
+  |  _, Tsimpl Tvoid, _ -> true  
   |  Tsimpl a, Tsimpl b, _ when a = b -> true
   |  Tmany([]), Tmany(a::x), _ -> raise_error "function takes more arguments" pos
   |  Tmany(a::x), Tmany([]), _ -> raise_error "function takes less arguments" pos
   |  Tmany( []), Tmany([]), _ -> true 
+  |  Tmany(Tvoid::x), Tmany (a::y), e::l -> raise_error "Can't assign _" pos
+  |  Tmany (a::y), Tmany(Tvoid::x), e::l -> compare_gotypes  (Tmany y) (Tmany x) l pos
   |  Tmany ((Tstar Tnone) :: x), Tmany ((Tstar s) :: y), e::l when fst e = Econst ENil -> compare_gotypes (Tmany x) (Tmany y) l pos
   |  Tmany (a :: x), Tmany (b :: y), e::l when (a = b) -> compare_gotypes (Tmany x) (Tmany y) l pos
   |  Tmany (a :: x), Tmany (b :: y), [] when (a = b) -> compare_gotypes (Tmany x) (Tmany y) [] pos
@@ -163,7 +171,7 @@ let rec type_expr env le_pos =
               (Tsimpl(Tstruct name), Eident name, pos, true)
             else  raise_error "Notfound_ident" pos
       end
-      |Eident "_" -> (Tsimpl Tvoid, Eident "_", pos, false) (* TODO check bool*)
+      |Eident "_" -> (Tsimpl Tvoid, Eident "_", pos, true) (* TODO check bool*)
       |Eident _ -> raise The_end 
       |Eunop (unop, te) -> begin 
         let t,e,p,b1 = type_expr env te in
@@ -242,10 +250,21 @@ let rec type_expr env le_pos =
       | Ecall (id, le)->  begin
           try begin
               let tinputs, tout = Smap.find id env.funct in
+              let in_len = List.fold_left (
+                fun c (e,_) -> match e with
+                  | Ecall (id2, le2) -> 
+                    let _, tout = Smap.find id2 env.funct in
+                    c + (List.length (gotype_to_typlist tout))
+                  | _ -> c + 1
+              ) 0 le in
+              if (List.length (gotype_to_typlist tinputs) <> in_len) then raise_error "Invalid call" pos
+              else if (List.length (gotype_to_typlist tinputs) = 0 && (List.length le <> 0)) then raise_error "Invalid call" pos
+              else 
               let types, exprs, _  = help_unwrap (List.map (type_expr env) le) in
               if not(compare_gotypes (gotypelist_to_gotype types pos) tinputs exprs pos) then 
               raise_error "Not the same types" pos
-              else (tout, Ecall (id, exprs), pos, false) end 
+              else (tout, Ecall (id, exprs), pos, false)
+              end
             with Not_found -> raise_error "Notfound_funct" pos end 
 
 (* Type Instructions: 'a -> 'b -> 'c -> 'a * 'd * bool * bool   *)
@@ -392,7 +411,13 @@ let add_function_to_env env d = match d with
         let arg_types = varlist_to_gotype env vars in 
         let ret_types = typeret_to_gotype env trets in 
 
-        {structs = env.structs; funct = Smap.add id (arg_types, ret_types) env.funct; vars = env.vars}
+        let input_id_typ = List.fold_left (fun vs var -> 
+        let (ids, t), pos = var in 
+        (List.rev (List.map (fun id -> (id, (typego_to_typ env t))) ids)) @ vs)
+        [] vars in
+
+        {structs = env.structs; funct = Smap.add id (arg_types, ret_types) env.funct; 
+            vars = env.vars; funct_info = Smap.add id (input_id_typ, Iblock b) env.funct_info}
       end
       else
         raise_error "huh?" pos    
@@ -473,7 +498,7 @@ let type_main_function env =
 let type_prog program =
   let prog, fmtpackage = program in
   let pos = (Lexing.dummy_pos, Lexing.dummy_pos) in
-  let env = { structs= Smap.empty; funct = Smap.empty ; vars = Smap.empty }  in
+  let env = { structs= Smap.empty; funct = Smap.empty ; vars = Smap.add "_" (Tvoid, ref true, ref true) Smap.empty; funct_info = Smap.empty}  in
   let env = List.fold_left add_struct_to_env env prog in
   let env = List.fold_left add_vars_to_struct env prog in 
   check_recursive_struct env;

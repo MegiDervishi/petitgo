@@ -88,7 +88,7 @@ type 'size operand = formatter -> unit -> unit
 
 let mangle_none fmt (l: label) = fprintf fmt "%s" l
 let mangle_leading_underscore fmt (l: label) = fprintf fmt "_%s" l
-let mangle = mangle_leading_underscore
+let mangle = mangle_none
 
 let reg r = fun fmt () -> fprintf fmt "%s" r
 let (!%) = reg
@@ -142,6 +142,7 @@ let movb a b = ins "movb %a, %a" a () b ()
 let movw a b = ins "movw %a, %a" a () b ()
 let movl a b = ins "movl %a, %a" a () b ()
 let movq a b = ins "movq %a, %a" a () b ()
+let emovq = ins "movq"
 
 let movabsq a b = ins "movabsq %a, %s" a () b
 
@@ -287,7 +288,7 @@ let dbyte l = ins ".byte %a" pr_ilist l
 let dint  l = ins ".int %a" pr_ilist l
 let dword l = ins ".word %a" pr_ilist l
 let dquad l = ins ".quad %a" pr_ilist l
-let string s = ins ".string %S" s
+let string s = ins ".string %s" s
 
 let address l = ins ".quad %a" pr_alist l
 let space n = ins ".space %d" n

@@ -178,7 +178,7 @@ for f in exec/*.go; do
 	score_comp=`expr $score_comp + 1`;
 	if gcc -no-pie $asm && ./a.out > out; then
 	    score_out=`expr $score_out + 1`;
-	    if cmp --quiet out $expected; then
+	    if cmp --quiet  out $expected; then
 		score_test=`expr $score_test + 1`;
 	    else
 		echo
