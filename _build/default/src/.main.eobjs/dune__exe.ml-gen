@@ -1,0 +1,17 @@
+(** @canonical Dune__exe.Ast *)
+module Ast = Dune__exe__Ast
+
+(** @canonical Dune__exe.Lexer *)
+module Lexer = Dune__exe__Lexer
+
+(** @canonical Dune__exe.Main *)
+module Main = Dune__exe__Main
+
+(** @canonical Dune__exe.Parser *)
+module Parser = Dune__exe__Parser
+
+(** @canonical Dune__exe.Typer *)
+module Typer = Dune__exe__Typer
+
+(** @canonical Dune__exe.X86_64 *)
+module X86_64 = Dune__exe__X86_64
