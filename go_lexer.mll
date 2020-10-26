@@ -1,6 +1,6 @@
 {
 open Lexing
-open Parser
+open Go_parser
 
 exception Lexing_error of string
 

@@ -65,19 +65,37 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let p = Parser.program Lexer.token buf in
+    let p = Go_parser.program Go_lexer.token buf in
     close_in f;
     print_string "lexing & parsing ok\n";
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0
-    
+    else
+    begin
+        let env,functions = Go_typer.type_prog p in
+        print_string "typage ok\n";
+        if !type_only then exit 0
+        else
+          Compiler.compile_program env nfile;
+          exit 0
+    end
   with
-    | Lexer.Lexing_error c ->
+    | Go_lexer.Lexing_error c ->
       localisation_lex (Lexing.lexeme_start_p buf);
       eprintf "Erreur lexicale: %s@." c;
       exit 1
-    | Parser.Error ->
+    | Go_parser.Error ->
       localisation_lex (Lexing.lexeme_start_p buf);
       eprintf "Erreur syntaxique@.";
       exit 1
+    | Go_typer.Typing_error (msg, pos) -> 
+      localisation_typer pos;
+      eprintf "Erreur de typage: %s.@." msg;
+      exit 1
+    | Go_typer.The_end -> 
+      eprintf "the end"; 
+      exit 1
+    | Go_typer.Unfinished -> eprintf "unfinished"; exit 1
+    | Go_typer.Texprweird -> eprintf "Texpr weird"; exit 1
+    | Compiler.CompileError -> eprintf "Erreur de compilation"; exit 1
     | _ -> eprintf "Error:weird"; exit 1

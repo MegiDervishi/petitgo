@@ -1,16 +1,16 @@
 open Format
+open Smap_definer
 
-(* Type for position - debuging purposes *)
 type pos = Lexing.position
 type tuple = pos * pos
 type 'a loc = 'a * tuple
 
-type ident = string 
-type unop = Not | Sign | Address | Pointer
+type ident = string
+type  unop = Not | Sign | Address | Pointer
 
 type binop = Iseq| Neq  | Lt| Leq | Gt | Geq|
              Add | Minus| Mult | Div| Mod| 
-             And | Or
+             And | Or   
 
 type constant =
   | Eint64 of int64 
@@ -28,6 +28,7 @@ type expr =
   | Ecall of ident * expr loc list 
   | Eunop of unop * expr loc 
   | Ebinop of binop * expr loc * expr loc 
+
 
 type type_go =
   | Tident of ident 
@@ -61,8 +62,32 @@ type vars = ident list * type_go loc
 type gofunc = ident * vars loc list * type_retour loc * block loc 
 type structure = ident * vars loc list 
 
+
 type decl = 
   | Dstruct of structure loc
   | Dfunc of gofunc loc
 
 type program = decl list * bool 
+
+type typ = 
+    | Tint
+    | Tbool
+    | Tstring
+    | Tstruct of string
+    | Tstar of typ
+    | Tnone
+    | Tvoid
+
+type gotype = 
+    | Tsimpl of typ 
+    | Tmany of typ list
+
+(* Environment *)
+type tstruct = (typ Smap.t ) Smap.t (* struct name -> (var name -> type of var) *)
+type tfunct = (gotype * gotype) Smap.t (* store name -> (args , return types), args = (types) *)
+type tvars = (typ * bool ref * bool ref) Smap.t (* store name -> type of var , is_it_used_bool -> true if used else false *)
+(* Name of input vars, func_block, *)
+type tfuncinfo = ((ident*typ) list * instr) Smap.t
+
+type typenv = {structs: tstruct; funct : tfunct; vars : tvars; funct_info : tfuncinfo} 
+

@@ -1,5 +1,5 @@
 %{
-  open Ast
+  open Go_ast
 
   let checknone typenone  = function
     | None -> typenone
